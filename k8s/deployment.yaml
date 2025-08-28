@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: davinci-backend
+  namespace: davinci-doc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: davinci-backend
+  template:
+    metadata:
+      labels:
+        app: davinci-backend
+    spec:
+      containers:
+      - name: backend
+        image: davinciregistry.azurecr.io/davinci-backend:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: FLASK_ENV
+          value: "production"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: davinci-backend
+  namespace: davinci-doc
+spec:
+  selector:
+    app: davinci-backend
+  ports:
+  - port: 5000
+    targetPort: 5000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: davinci-frontend
+  namespace: davinci-doc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: davinci-frontend
+  template:
+    metadata:
+      labels:
+        app: davinci-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: davinciregistry.azurecr.io/davinci-frontend:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: REACT_APP_API_URL
+          value: "http://davinci-backend:5000"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: davinci-frontend
+  namespace: davinci-doc
+spec:
+  selector:
+    app: davinci-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: LoadBalancer
