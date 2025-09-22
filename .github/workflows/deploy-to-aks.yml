@@ -76,8 +76,8 @@ jobs:
 
     - name: Update deployment images
       run: |
-        kubectl set image deployment/davinci-backend davinci-backend=${{ env.ACR_NAME }}.azurecr.io/davinci-backend:${{ env.IMAGE_TAG }} -n ${{ env.NAMESPACE }}
-        kubectl set image deployment/davinci-frontend davinci-frontend=${{ env.ACR_NAME }}.azurecr.io/davinci-frontend:${{ env.IMAGE_TAG }} -n ${{ env.NAMESPACE }}
+        kubectl set image deployment/davinci-backend backend=${{ env.ACR_NAME }}.azurecr.io/davinci-backend:${{ env.IMAGE_TAG }} -n ${{ env.NAMESPACE }}
+        kubectl set image deployment/davinci-frontend frontend=${{ env.ACR_NAME }}.azurecr.io/davinci-frontend:${{ env.IMAGE_TAG }} -n ${{ env.NAMESPACE }}
 
     - name: Wait for rollout
       run: |
