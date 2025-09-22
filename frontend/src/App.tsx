@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Paper,
@@ -20,11 +20,13 @@ import {
   Download as DownloadIcon,
   Description as DocumentIcon,
   Settings as SettingsIcon,
-  Preview as PreviewIcon
+  Preview as PreviewIcon,
+  Logout as LogoutIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import ConfigDialog from './components/ConfigDialog';
+import Login from './Login';
 import './App.css';
 
 // Default to relative base so NGINX can proxy `/api` in Docker/K8s.
@@ -40,7 +42,14 @@ interface DocumentConfig {
   logoBase64?: string;
 }
 
+interface User {
+  name: string;
+  email: string;
+}
+
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [markdown, setMarkdown] = useState<string>(`# Document Title
 
 ## Introduction
@@ -95,6 +104,26 @@ Thank you for using the Davinci Document Creator!`);
     email: 'info@davincisolutions.ai',
     disclaimer: 'This document contains confidential and proprietary information of Davinci AI Solutions. © 2025 All Rights Reserved.',
   });
+
+  useEffect(() => {
+    // Check if user is authenticated
+    const checkAuth = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/auth/user`);
+        if (response.data && response.data.email) {
+          setIsAuthenticated(true);
+          setUser(response.data);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        // Not authenticated
+        setIsAuthenticated(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   const handleConvert = async () => {
     setLoading(true);
@@ -162,6 +191,24 @@ Thank you for using the Davinci Document Creator!`);
     setConfigOpen(false);
   };
 
+  const handleLogout = () => {
+    window.location.href = '/api/auth/logout';
+  };
+
+  // Show loading while checking authentication
+  if (isAuthenticated === null) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return <Login />;
+  }
+
   return (
     <>
       <AppBar position="static" sx={{ mb: 3 }}>
@@ -170,9 +217,19 @@ Thank you for using the Davinci Document Creator!`);
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Davinci Document Creator
           </Typography>
+          {user && (
+            <Typography variant="body2" sx={{ mr: 2 }}>
+              {user.name || user.email}
+            </Typography>
+          )}
           <Tooltip title="Configure Document Settings">
             <IconButton color="inherit" onClick={() => setConfigOpen(true)}>
               <SettingsIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Logout">
+            <IconButton color="inherit" onClick={handleLogout}>
+              <LogoutIcon />
             </IconButton>
           </Tooltip>
         </Toolbar>

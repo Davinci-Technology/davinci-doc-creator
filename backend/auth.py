@@ -48,6 +48,18 @@ class AzureADAuth:
         )
         return auth_url
 
+    def acquire_token_by_code(self, code):
+        """Exchange authorization code for tokens"""
+        if not self.msal_app:
+            return {'error': 'Authentication not configured'}
+
+        result = self.msal_app.acquire_token_by_authorization_code(
+            code,
+            scopes=self.scope,
+            redirect_uri=self.redirect_uri
+        )
+        return result
+
     def acquire_token_by_auth_code(self, code):
         """Exchange authorization code for tokens"""
         if not self.msal_app:

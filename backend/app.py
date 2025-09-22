@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, session, redirect, url_for
 from flask_cors import CORS
 import markdown2
 from reportlab.lib.pagesizes import letter
@@ -25,11 +25,20 @@ import os
 from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 CORS(app,
      origins=["*"],  # Allow all origins for local development
      expose_headers=['Content-Disposition'],
      allow_headers=['Content-Type'],
-     methods=['GET', 'POST', 'OPTIONS'])
+     methods=['GET', 'POST', 'OPTIONS'],
+     supports_credentials=True)
+
+# Initialize Azure AD authentication
+from auth import AzureADAuth
+auth = AzureADAuth(app)
+
+# Check if authentication is required
+REQUIRE_AUTH = os.environ.get('REQUIRE_AUTH', 'false').lower() == 'true'
 
 # Set up application logging to tmp/logs
 # Write logs under backend/tmp/logs so they are visible via the bind mount
@@ -545,6 +554,82 @@ def convert_markdown():
         return jsonify({"error": str(e)}), 500
 
 # Removed unused /api/preview endpoint. Frontend does client-side preview.
+
+# Authentication routes
+@app.route('/api/auth/login')
+def login():
+    """Redirect to Azure AD login"""
+    if not REQUIRE_AUTH:
+        # If auth is disabled, mock a successful login
+        session['user'] = {
+            'name': 'Test User',
+            'email': 'test@davincisolutions.ai',
+            'sub': 'test-user-id'
+        }
+        return redirect('/')
+
+    auth_url = auth.get_auth_url()
+    if auth_url:
+        return redirect(auth_url)
+    return jsonify({'error': 'Authentication not configured'}), 500
+
+@app.route('/api/auth/callback')
+def auth_callback():
+    """Handle Azure AD callback"""
+    if not REQUIRE_AUTH:
+        # Mock successful auth for testing
+        session['user'] = {
+            'name': 'Test User',
+            'email': 'test@davincisolutions.ai',
+            'sub': 'test-user-id'
+        }
+        return redirect('/')
+
+    code = request.args.get('code')
+    if not code:
+        return jsonify({'error': 'No authorization code received'}), 400
+
+    token_result = auth.acquire_token_by_code(code)
+    if 'error' in token_result:
+        return jsonify({'error': token_result['error_description']}), 400
+
+    # Store user info in session
+    session['user'] = token_result.get('id_token_claims', {})
+
+    # Redirect to frontend
+    return redirect('/')
+
+@app.route('/api/auth/user')
+def get_user():
+    """Get current user info"""
+    if not REQUIRE_AUTH:
+        # Return mock user for testing
+        return jsonify({
+            'name': 'Test User',
+            'email': 'test@davincisolutions.ai',
+            'authenticated': True
+        })
+
+    user = session.get('user')
+    if user:
+        return jsonify({
+            'name': user.get('name', ''),
+            'email': user.get('preferred_username', user.get('email', '')),
+            'authenticated': True
+        })
+    return jsonify({'authenticated': False})
+
+@app.route('/api/auth/logout')
+def logout():
+    """Logout user"""
+    session.clear()
+
+    if not REQUIRE_AUTH:
+        return redirect('/')
+
+    # Redirect to Azure AD logout
+    logout_url = f"https://login.microsoftonline.com/{auth.tenant_id}/oauth2/v2.0/logout"
+    return redirect(logout_url)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001, host='0.0.0.0')

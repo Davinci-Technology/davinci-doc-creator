@@ -22,7 +22,7 @@ spec:
         - name: FLASK_ENV
           value: "production"
         - name: REQUIRE_AUTH
-          value: "false"  # Set to true to enable Azure AD
+          value: "true"  # Azure AD authentication enabled
         - name: AZURE_AD_TENANT_ID
           valueFrom:
             secretKeyRef:
