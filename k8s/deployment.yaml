@@ -22,7 +22,7 @@ spec:
         - name: FLASK_ENV
           value: "production"
         - name: REQUIRE_AUTH
-          value: "false"  # Temporarily disabled for testing
+          value: "true"  # Azure AD authentication enabled
         - name: AZURE_AD_TENANT_ID
           valueFrom:
             secretKeyRef:
@@ -39,7 +39,7 @@ spec:
               name: davinci-doc-secrets
               key: azure-client-secret
         - name: AZURE_AD_REDIRECT_URI
-          value: "http://docs.davincisolutions.ai/auth/callback"
+          value: "https://docs.davincisolutions.ai/api/auth/callback"
         resources:
           requests:
             memory: "64Mi"
