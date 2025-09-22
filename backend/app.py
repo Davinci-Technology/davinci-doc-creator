@@ -530,12 +530,14 @@ def convert_markdown():
             config['logo_path'] = logo_path
         else:
             # Use default Davinci logo if it exists (prefer PNG for ReportLab compatibility)
-            default_logo_png = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo.png')
-            default_logo_svg = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo.svg')
+            # Try both locations - in container and in development
+            default_logo_png = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo.png')
+            default_logo_png_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo.png')
+
             if os.path.exists(default_logo_png):
                 config['logo_path'] = default_logo_png
-            elif os.path.exists(default_logo_svg):
-                config['logo_path'] = default_logo_svg
+            elif os.path.exists(default_logo_png_parent):
+                config['logo_path'] = default_logo_png_parent
         
         app.logger.info('Starting conversion request')
         pdf_buffer = create_pdf(markdown_text, config)
