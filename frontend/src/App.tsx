@@ -31,7 +31,7 @@ import './App.css';
 
 // Default to relative base so NGINX can proxy `/api` in Docker/K8s.
 // For local dev with `npm start`, set REACT_APP_API_URL=http://localhost:5001
-const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5001/api';
+const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 interface DocumentConfig {
   company: string;
