@@ -3,39 +3,76 @@ from flask_cors import CORS
 import markdown2
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image, Table, TableStyle
-from reportlab.platypus.flowables import PageNumLabel
+from reportlab.lib.units import inch, cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image, Table, TableStyle, HRFlowable
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT, TA_JUSTIFY
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 from reportlab.platypus import PageTemplate, Frame, BaseDocTemplate
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import reportlab.rl_config
+reportlab.rl_config.warnOnMissingFontGlyphs = 0
 import io
 import os
 from datetime import datetime
 import base64
+from html.parser import HTMLParser
+import re
+from PIL import Image
+import logging
+import os
+from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
-CORS(app)
+CORS(app,
+     origins=["*"],  # Allow all origins for local development
+     expose_headers=['Content-Disposition'],
+     allow_headers=['Content-Type'],
+     methods=['GET', 'POST', 'OPTIONS'])
+
+# Set up application logging to tmp/logs
+# Write logs under backend/tmp/logs so they are visible via the bind mount
+logs_dir = os.path.join(os.path.dirname(__file__), 'tmp', 'logs')
+try:
+    os.makedirs(logs_dir, exist_ok=True)
+    handler = RotatingFileHandler(os.path.join(logs_dir, 'backend.log'), maxBytes=2_000_000, backupCount=3)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    handler.setFormatter(formatter)
+    if not app.logger.handlers:
+        app.logger.addHandler(handler)
+    app.logger.setLevel(logging.INFO)
+except Exception:
+    # Fallback to default logger if filesystem not writable
+    pass
 
 class NumberedCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
+        # Extract custom parameters before passing to Canvas
+        self.logo_path = kwargs.pop('logo_path', None)
+        self.letterhead = kwargs.pop('letterhead', None)
+        self.disclaimer = kwargs.pop('disclaimer', None)
+        
         canvas.Canvas.__init__(self, *args, **kwargs)
         self._saved_page_states = []
-        self.page_num = 0
+        self.current_page_number = 1
         self.total_pages = 0
-        self.logo_path = kwargs.get('logo_path')
-        self.letterhead = kwargs.get('letterhead')
-        self.disclaimer = kwargs.get('disclaimer')
 
     def showPage(self):
         self._saved_page_states.append(dict(self.__dict__))
         self._startPage()
 
     def save(self):
-        self.total_pages = len(self._saved_page_states)
-        for state in self._saved_page_states:
+        # Count total pages
+        num_pages = len(self._saved_page_states)
+        
+        # Draw on each saved page
+        for page_num, state in enumerate(self._saved_page_states, start=1):
             self.__dict__.update(state)
+            # Set both current page and total pages for this page
+            self.current_page_number = page_num
+            self.total_pages = num_pages
             self.draw_page_number()
             self.draw_header()
             self.draw_footer()
@@ -45,38 +82,43 @@ class NumberedCanvas(canvas.Canvas):
     def draw_page_number(self):
         self.saveState()
         self.setFont("Helvetica", 9)
+        self.setFillColor(colors.HexColor('#494949'))  # Davinci Grey
         self.drawRightString(
             letter[0] - inch * 0.75, 
-            inch * 0.75,
-            f"Page {self._pageNumber} of {self.total_pages}"
+            inch * 0.5,
+            f"Page {self.current_page_number} of {self.total_pages}"
         )
         self.restoreState()
 
     def draw_header(self):
         self.saveState()
         
-        # Letterhead on top left
-        if self.letterhead:
-            self.setFont("Helvetica-Bold", 12)
-            self.drawString(inch * 0.75, letter[1] - inch * 0.75, self.letterhead['company'])
-            self.setFont("Helvetica", 9)
-            self.drawString(inch * 0.75, letter[1] - inch * 0.95, self.letterhead.get('address', ''))
-            self.drawString(inch * 0.75, letter[1] - inch * 1.1, self.letterhead.get('phone', ''))
-        
-        # Logo on top right (placeholder for now)
+        # Logo on top right per branding guidelines (horizontal version, size S: 3.5cm x 1.05cm)
         if self.logo_path and os.path.exists(self.logo_path):
             try:
                 self.drawImage(
                     self.logo_path,
-                    letter[0] - inch * 2.5,
-                    letter[1] - inch * 1.25,
-                    width=inch * 1.5,
-                    height=inch * 0.75,
+                    letter[0] - (3.5 * cm) - inch * 0.75,  # Right aligned with margin
+                    letter[1] - (1.05 * cm) - inch * 0.5,  # Top aligned with space
+                    width=3.5 * cm,  # Size S from branding guidelines
+                    height=1.05 * cm,
                     preserveAspectRatio=True,
                     mask='auto'
                 )
             except:
                 pass
+        
+        # Letterhead on top left - using Davinci Blue color
+        if self.letterhead:
+            self.setFont("Helvetica-Bold", 12)
+            self.setFillColor(colors.HexColor('#0B98CE'))  # Davinci Blue
+            self.drawString(inch * 0.75, letter[1] - inch * 0.75, self.letterhead['company'])
+            self.setFont("Helvetica", 9)
+            self.setFillColor(colors.HexColor('#494949'))  # Davinci Grey
+            self.drawString(inch * 0.75, letter[1] - inch * 0.95, self.letterhead.get('address', ''))
+            self.drawString(inch * 0.75, letter[1] - inch * 1.1, self.letterhead.get('phone', ''))
+            if self.letterhead.get('email'):
+                self.drawString(inch * 0.75, letter[1] - inch * 1.25, self.letterhead.get('email', ''))
         
         self.restoreState()
 
@@ -86,14 +128,214 @@ class NumberedCanvas(canvas.Canvas):
         # Disclaimer in bottom center
         if self.disclaimer:
             self.setFont("Helvetica", 8)
+            self.setFillColor(colors.HexColor('#7A879C'))  # Davinci Stone (light grey for disclaimer)
             text_width = self.stringWidth(self.disclaimer, "Helvetica", 8)
             self.drawString(
                 (letter[0] - text_width) / 2,
-                inch * 0.5,
+                inch * 0.3,
                 self.disclaimer
             )
         
         self.restoreState()
+
+class HTMLToReportLab(HTMLParser):
+    """Convert HTML to ReportLab flowables"""
+    def __init__(self, styles):
+        super().__init__()
+        self.story = []
+        self.styles = styles
+        self.current_text = []
+        self.current_style = 'CustomBody'
+        self.in_list = False
+        self.list_type = None  # 'ul' or 'ol'
+        self.list_counter = 0
+        self.in_table = False
+        self.table_data = []
+        self.table_row = []
+        self.in_cell = False
+        self.in_bold = False
+        self.in_italic = False
+        self.last_was_metadata = False  # Track if previous paragraph was metadata
+        
+    def handle_starttag(self, tag, attrs):
+        # Flush any accumulated text before handling new tag (except for inline tags and br)
+        if self.current_text and tag not in ['strong', 'em', 'b', 'i', 'code', 'td', 'th', 'br'] and not self.in_cell:
+            self._flush_text()
+            
+        if tag == 'h1':
+            self.current_style = 'CustomHeading1'
+        elif tag == 'h2':
+            self.current_style = 'CustomHeading2'
+        elif tag == 'h3':
+            self.current_style = 'CustomHeading3'
+        elif tag == 'p':
+            self.current_style = 'CustomBody'
+        elif tag == 'ul':
+            self.in_list = True
+            self.list_type = 'ul'
+        elif tag == 'ol':
+            self.in_list = True
+            self.list_type = 'ol'
+            self.list_counter = 0
+        elif tag == 'li':
+            if self.in_list:
+                self.current_style = 'BulletText'
+                if self.list_type == 'ol':
+                    self.list_counter += 1
+                    self.current_text.append(f'{self.list_counter}. ')
+                else:
+                    self.current_text.append('• ')
+        elif tag == 'hr':
+            self.story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#CCCCCC'), spaceBefore=16, spaceAfter=4))
+        elif tag == 'table':
+            self.in_table = True
+            self.table_data = []
+        elif tag == 'tr' and self.in_table:
+            self.table_row = []
+        elif tag in ['td', 'th'] and self.in_table:
+            self.in_cell = True
+            self.current_text = []
+        elif tag == 'strong' or tag == 'b':
+            if not self.in_bold:  # Avoid double nesting
+                self.in_bold = True
+                self.current_text.append('<b>')
+        elif tag == 'em' or tag == 'i':
+            if not self.in_italic:  # Avoid double nesting
+                self.in_italic = True
+                self.current_text.append('<i>')
+        elif tag == 'code':
+            self.current_text.append('<font name="Courier">')
+        elif tag == 'br':
+            self.current_text.append('<br/>')
+            
+    def handle_endtag(self, tag):
+        if tag in ['h1', 'h2', 'h3', 'p', 'li']:
+            self._flush_text()
+            self.current_style = 'CustomBody'
+        elif tag == 'ul' or tag == 'ol':
+            self.in_list = False
+        elif tag == 'table' and self.in_table:
+            self.in_table = False
+            if self.table_data:
+                # Clean up table data - convert HTML tags in cells to ReportLab format
+                cleaned_data = []
+                for row in self.table_data:
+                    cleaned_row = []
+                    for cell in row:
+                        # Process cell content to handle bold tags properly
+                        if '<b>' in cell and '</b>' in cell:
+                            # Cell has bold content - wrap in Paragraph for proper rendering
+                            cleaned_row.append(Paragraph(cell, self.styles['CustomBody']))
+                        else:
+                            # Plain text cell
+                            cleaned_row.append(cell)
+                    cleaned_data.append(cleaned_row)
+                
+                # Create table with styling
+                table = Table(cleaned_data)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F0F0F0')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#494949')),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#CCCCCC')),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 9),
+                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ]))
+                self.story.append(table)
+                self.story.append(Spacer(1, 12))
+        elif tag == 'tr' and self.in_table:
+            if self.table_row:
+                self.table_data.append(self.table_row)
+                self.table_row = []
+        elif tag in ['td', 'th'] and self.in_table:
+            # Get cell content, removing nested HTML tags if they weren't handled
+            text = ''.join(self.current_text).strip()
+            # Clean up any unclosed tags
+            text = text.replace('<b></b>', '').replace('<i></i>', '')
+            self.table_row.append(text)
+            self.current_text = []
+            self.in_cell = False
+        elif tag == 'strong' or tag == 'b':
+            if self.in_bold:
+                self.in_bold = False
+                self.current_text.append('</b>')
+        elif tag == 'em' or tag == 'i':
+            if self.in_italic:
+                self.in_italic = False
+                self.current_text.append('</i>')
+        elif tag == 'code':
+            self.current_text.append('</font>')
+            
+    def handle_data(self, data):
+        # Always add data if we're in a cell, even whitespace might be important
+        if self.in_cell:
+            self.current_text.append(data)
+        elif self.in_table and not self.in_cell:
+            return  # Skip whitespace between table structure tags
+        elif data.strip():  # For non-table content, only add non-empty data
+            self.current_text.append(data)
+        elif self.current_text:  # If we have text accumulated, preserve whitespace
+            # This handles the case where we have newlines after <br/> tags
+            self.current_text.append(' ')
+            
+    def _flush_text(self):
+        if self.current_text:
+            text = ''.join(self.current_text).strip()
+            if text:
+                # Handle escaped HTML entities
+                text = text.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+                
+                # Check if this is a metadata line (bold text with colon like "Investment:", "Timeline:")
+                is_metadata = False
+                style_to_use = self.current_style
+                if self.current_style == 'CustomBody' and '<b>' in text and '</b>' in text:
+                    # Check if it's one of our key metadata lines
+                    clean_text = re.sub(r'<[^>]+>', '', text).lower()
+                    if any(keyword in clean_text for keyword in ['investment', 'timeline', 'deliverable', 'from:']):
+                        is_metadata = True
+                        # If previous was also metadata, use zero spacing
+                        if self.last_was_metadata:
+                            # Add a tiny spacer between metadata lines
+                            self.story.append(Spacer(1, 4))
+                
+                try:
+                    # Use very tight spacing for metadata lines
+                    if is_metadata:
+                        # Create a custom paragraph with minimal spacing
+                        para = Paragraph(text, self.styles['MetadataText'])
+                    else:
+                        # If transitioning from metadata to normal body content, add extra breathing room
+                        if self.last_was_metadata:
+                            self.story.append(Spacer(1, 10))
+                        para = Paragraph(text, self.styles[style_to_use])
+                    self.story.append(para)
+                    
+                    # Only add extra spacing after bold text with colon if it's NOT metadata
+                    # and we didn't already add spacing for a metadata transition
+                    if ('<b>' in text and '</b>' in text and ':' in text and 
+                        not is_metadata and not self.last_was_metadata):
+                        self.story.append(Spacer(1, 6))
+                    
+                    self.last_was_metadata = is_metadata
+                except:
+                    # If paragraph fails (e.g., unclosed tags), add as plain text
+                    clean_text = re.sub(r'<[^>]+>', '', text)
+                    self.story.append(Paragraph(clean_text, self.styles[style_to_use]))
+                    self.last_was_metadata = False
+        self.current_text = []
+        
+    def get_story(self):
+        # Flush any remaining text
+        self._flush_text()
+        return self.story
 
 def create_pdf(markdown_text, config):
     buffer = io.BytesIO()
@@ -102,22 +344,23 @@ def create_pdf(markdown_text, config):
     doc = SimpleDocTemplate(
         buffer,
         pagesize=letter,
-        rightMargin=inch * 0.75,
-        leftMargin=inch * 0.75,
-        topMargin=inch * 1.5,
-        bottomMargin=inch * 1.25
+        rightMargin=inch * 1.0,   # add breathing room on the sides
+        leftMargin=inch * 1.0,
+        topMargin=inch * 1.6,     # slightly more top margin
+        bottomMargin=inch * 1.3
     )
     
     # Create custom styles
     styles = getSampleStyleSheet()
     
-    # Custom heading styles
+    # Custom heading styles using Davinci brand colors
     styles.add(ParagraphStyle(
         name='CustomHeading1',
         parent=styles['Heading1'],
-        fontSize=16,
-        textColor=colors.HexColor('#2c3e50'),
-        spaceAfter=12,
+        fontSize=18,
+        textColor=colors.HexColor('#0B98CE'),  # Davinci Blue
+        spaceAfter=14,
+        spaceBefore=16,
         fontName='Helvetica-Bold'
     ))
     
@@ -125,8 +368,9 @@ def create_pdf(markdown_text, config):
         name='CustomHeading2',
         parent=styles['Heading2'],
         fontSize=14,
-        textColor=colors.HexColor('#34495e'),
-        spaceAfter=10,
+        textColor=colors.HexColor('#316EA8'),  # Davinci Denim (darker blue)
+        spaceAfter=14,
+        spaceBefore=10,
         fontName='Helvetica-Bold'
     ))
     
@@ -134,8 +378,9 @@ def create_pdf(markdown_text, config):
         name='CustomHeading3',
         parent=styles['Heading3'],
         fontSize=12,
-        textColor=colors.HexColor('#34495e'),
+        textColor=colors.HexColor('#494949'),  # Davinci Grey
         spaceAfter=8,
+        spaceBefore=10,
         fontName='Helvetica-Bold'
     ))
     
@@ -143,48 +388,60 @@ def create_pdf(markdown_text, config):
         name='CustomBody',
         parent=styles['BodyText'],
         fontSize=11,
+        textColor=colors.HexColor('#494949'),  # Davinci Grey for body text
         alignment=TA_JUSTIFY,
-        spaceBefore=6,
-        spaceAfter=6
+        leading=15,                # increase line spacing for readability
+        spaceBefore=2,
+        spaceAfter=6,
+        fontName='Helvetica'
     ))
     
     styles.add(ParagraphStyle(
         name='BulletText',
         parent=styles['BodyText'],
         fontSize=11,
-        leftIndent=20,
-        bulletIndent=10
+        textColor=colors.HexColor('#494949'),  # Davinci Grey
+        leftIndent=24,
+        bulletIndent=10,
+        leading=15,
+        spaceBefore=5,
+        spaceAfter=4,
+        fontName='Helvetica'
     ))
     
-    # Convert markdown to HTML
+    # Add a tight style for metadata lines like Investment, Timeline, Deliverable
+    styles.add(ParagraphStyle(
+        name='MetadataText',
+        parent=styles['BodyText'],
+        fontSize=11,
+        textColor=colors.HexColor('#494949'),
+        leading=13,
+        spaceBefore=0,
+        spaceAfter=4,              # a touch more room for stacked metadata lines
+        fontName='Helvetica'
+    ))
+    
+    # Convert markdown to HTML with all features enabled
     html = markdown2.markdown(
         markdown_text,
-        extras=['fenced-code-blocks', 'tables', 'break-on-newline']
+        extras=[
+            'fenced-code-blocks',
+            'tables',
+            'break-on-newline',
+            'header-ids',
+            'strike',
+            'task_list'
+        ]
     )
     
-    # Parse HTML and create flowables
-    story = []
+    # Use the HTML parser to create ReportLab flowables
+    parser = HTMLToReportLab(styles)
+    parser.feed(html)
+    story = parser.get_story()
     
-    # Simple HTML to ReportLab conversion
-    lines = html.split('\n')
-    for line in lines:
-        if not line.strip():
-            story.append(Spacer(1, 6))
-        elif line.startswith('<h1>'):
-            text = line.replace('<h1>', '').replace('</h1>', '')
-            story.append(Paragraph(text, styles['CustomHeading1']))
-        elif line.startswith('<h2>'):
-            text = line.replace('<h2>', '').replace('</h2>', '')
-            story.append(Paragraph(text, styles['CustomHeading2']))
-        elif line.startswith('<h3>'):
-            text = line.replace('<h3>', '').replace('</h3>', '')
-            story.append(Paragraph(text, styles['CustomHeading3']))
-        elif line.startswith('<li>'):
-            text = line.replace('<li>', '• ').replace('</li>', '')
-            story.append(Paragraph(text, styles['BulletText']))
-        elif line.startswith('<p>'):
-            text = line.replace('<p>', '').replace('</p>', '')
-            story.append(Paragraph(text, styles['CustomBody']))
+    # Ensure we have some content
+    if not story:
+        story.append(Paragraph("No content to display", styles['CustomBody']))
     
     # Build PDF with custom canvas
     doc.build(
@@ -210,54 +467,84 @@ def convert_markdown():
     try:
         data = request.json
         markdown_text = data.get('markdown', '')
+
+        # Basic validation (allow large docs, just prevent empty submissions)
+        if not isinstance(markdown_text, str) or not markdown_text.strip():
+            return jsonify({"error": "'markdown' is required and cannot be empty"}), 400
         
-        # Configuration for the PDF
+        # Extract document title from first H1 header
+        title = 'document'
+        lines = markdown_text.split('\n')
+        for line in lines:
+            if line.startswith('# '):
+                # Extract title and clean it for filename
+                title = line[2:].strip()
+                # Remove special characters and replace spaces with hyphens
+                title = ''.join(c if c.isalnum() or c in (' ', '-', '_') else '' for c in title)
+                title = title.replace(' ', '-').lower()
+                break
+        
+        # Configuration for the PDF with Davinci AI Solutions defaults
         config = {
             'letterhead': {
-                'company': data.get('company', 'Davinci Corporation'),
-                'address': data.get('address', '123 Business St, Suite 100'),
-                'phone': data.get('phone', '(555) 123-4567')
+                'company': data.get('company', 'Davinci AI Solutions'),
+                'address': data.get('address', '11-6320 11 Street SE, Calgary, AB T2H 2L7'),
+                'phone': data.get('phone', '+1 (403) 245-9429'),
+                'email': data.get('email', 'info@davincisolutions.ai')
             },
-            'disclaimer': data.get('disclaimer', 'This document is confidential and proprietary.'),
+            'disclaimer': data.get('disclaimer', 'This document contains confidential and proprietary information of Davinci AI Solutions. © 2025 All Rights Reserved.'),
             'logo_path': None  # Will be handled separately
         }
         
-        # Handle logo if provided as base64
-        if data.get('logo_base64'):
-            logo_data = base64.b64decode(data['logo_base64'])
+        # Handle logo - accept both snake_case and camelCase, validate size/type
+        logo_b64 = data.get('logo_base64') or data.get('logoBase64')
+        if logo_b64:
+            try:
+                logo_data = base64.b64decode(logo_b64)
+            except Exception:
+                return jsonify({"error": "Invalid base64 for logo"}), 400
+
+            # Enforce reasonable logo size (5MB) without limiting document content size
+            if len(logo_data) > 5 * 1024 * 1024:
+                return jsonify({"error": "Logo image exceeds 5MB limit"}), 400
+
+            # Verify it is an image Pillow can open
+            try:
+                img = Image.open(io.BytesIO(logo_data))
+                img.verify()  # Validate file integrity
+            except Exception:
+                return jsonify({"error": "Uploaded logo is not a valid image"}), 400
+
             logo_path = '/tmp/temp_logo.png'
             with open(logo_path, 'wb') as f:
                 f.write(logo_data)
             config['logo_path'] = logo_path
+        else:
+            # Use default Davinci logo if it exists (prefer PNG for ReportLab compatibility)
+            default_logo_png = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo.png')
+            default_logo_svg = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo.svg')
+            if os.path.exists(default_logo_png):
+                config['logo_path'] = default_logo_png
+            elif os.path.exists(default_logo_svg):
+                config['logo_path'] = default_logo_svg
         
+        app.logger.info('Starting conversion request')
         pdf_buffer = create_pdf(markdown_text, config)
+        size_bytes = pdf_buffer.getbuffer().nbytes
+        app.logger.info('Conversion success: title=%s size_bytes=%d', title, size_bytes)
         
         return send_file(
             pdf_buffer,
             mimetype='application/pdf',
             as_attachment=True,
-            download_name=f'document_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+            download_name=f'{title}-{datetime.now().strftime("%Y-%m-%d-%H%M%S")}.pdf'
         )
     
     except Exception as e:
+        app.logger.exception('Conversion failed: %s', str(e))
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/preview', methods=['POST'])
-def preview():
-    try:
-        data = request.json
-        markdown_text = data.get('markdown', '')
-        
-        # Convert markdown to HTML for preview
-        html = markdown2.markdown(
-            markdown_text,
-            extras=['fenced-code-blocks', 'tables', 'break-on-newline']
-        )
-        
-        return jsonify({"html": html})
-    
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# Removed unused /api/preview endpoint. Frontend does client-side preview.
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001, host='0.0.0.0')

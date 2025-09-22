@@ -4,7 +4,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "5000:5000"
+      - "5002:5002"
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=development
@@ -17,9 +17,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:5000
+      - "3001:80"
     volumes:
       - ./frontend:/app
       - /app/node_modules

@@ -4,52 +4,57 @@ __pycache__/
 *$py.class
 *.so
 .Python
-venv/
 env/
+venv/
 ENV/
-*.egg-info/
-dist/
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+.env
 
 # Node
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+.npm
+.yarn-integrity
 
 # React build
-/frontend/build
-
-# Environment
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+frontend/build/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 .DS_Store
 
-# Logs
+# Project specific
+tmp/
+backend/tmp/
+*.pdf
+!assets/**/*.pdf
 *.log
-logs/
 
-# Testing
+# Docker
+.dockerignore
+
+# Test coverage
 coverage/
 .coverage
 htmlcov/
 .pytest_cache/
-
-# Assets
-assets/logos/*
-!assets/logos/.gitkeep
-
-# Temporary files
-*.tmp
-temp/
-/tmp
+k8s/secret.yaml

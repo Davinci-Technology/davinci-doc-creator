@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Container,
-  Grid,
   Paper,
   TextField,
   Button,
@@ -28,12 +27,15 @@ import ReactMarkdown from 'react-markdown';
 import ConfigDialog from './components/ConfigDialog';
 import './App.css';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// Default to relative base so NGINX can proxy `/api` in Docker/K8s.
+// For local dev with `npm start`, set REACT_APP_API_URL=http://localhost:5001
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5001/api';
 
 interface DocumentConfig {
   company: string;
   address: string;
   phone: string;
+  email?: string;
   disclaimer: string;
   logoBase64?: string;
 }
@@ -87,10 +89,11 @@ Thank you for using the Davinci Document Creator!`);
   const [showPreview, setShowPreview] = useState<boolean>(false);
   
   const [config, setConfig] = useState<DocumentConfig>({
-    company: 'Davinci Corporation',
-    address: '123 Business St, Suite 100',
-    phone: '(555) 123-4567',
-    disclaimer: 'This document is confidential and proprietary.',
+    company: 'Davinci AI Solutions',
+    address: '11-6320 11 Street SE, Calgary, AB T2H 2L7',
+    phone: '+1 (403) 245-9429',
+    email: 'info@davincisolutions.ai',
+    disclaimer: 'This document contains confidential and proprietary information of Davinci AI Solutions. © 2025 All Rights Reserved.',
   });
 
   const handleConvert = async () => {
@@ -98,9 +101,13 @@ Thank you for using the Davinci Document Creator!`);
     setError('');
     setSuccess('');
 
+    const apiEndpoint = `${API_URL}/convert`;
+    console.log('Attempting to call:', apiEndpoint);
+    console.log('API_URL:', API_URL);
+
     try {
       const response = await axios.post(
-        `${API_URL}/api/convert`,
+        apiEndpoint,
         {
           markdown,
           ...config,
@@ -110,18 +117,41 @@ Thank you for using the Davinci Document Creator!`);
         }
       );
 
+      // Extract filename from Content-Disposition header
+      // Note: axios lowercases all header names
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `document-${Date.now()}.pdf`;
+      if (contentDisposition) {
+        // More robust regex to handle various formats
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
+      console.log('Content-Disposition:', contentDisposition);
+      console.log('Extracted filename:', filename);
+      
       // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `document_${Date.now()}.pdf`);
+      link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
       
       setSuccess('PDF generated successfully!');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to generate PDF');
+      console.error('PDF generation error:', err);
+      console.error('Error response:', err.response);
+      console.error('Error message:', err.message);
+      console.error('Error config:', err.config);
+
+      if (err.message === 'Network Error' && !err.response) {
+        setError('Cannot connect to server. Please ensure the backend is running on port 5001.');
+      } else {
+        setError(err.response?.data?.error || err.message || 'Failed to generate PDF');
+      }
     } finally {
       setLoading(false);
     }
@@ -149,8 +179,8 @@ Thank you for using the Davinci Document Creator!`);
       </AppBar>
 
       <Container maxWidth="xl">
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 48%' } }}>
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -181,9 +211,9 @@ Thank you for using the Davinci Document Creator!`);
                 />
               </CardContent>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={6}>
+          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 48%' } }}>
             <Card>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
@@ -279,8 +309,8 @@ Thank you for using the Davinci Document Creator!`);
                 )}
               </CardContent>
             </Card>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
 
         <Box mt={3} textAlign="center">
           {error && (
