@@ -140,6 +140,29 @@ METADATA_DOC = """# Project Proposal
 This is the project overview.
 """
 
+# Document with new features (links, blockquotes, better code)
+NEW_FEATURES_DOC = """# New Features Test
+
+## Clickable Links
+
+Visit [Davinci AI Solutions](https://davincisolutions.ai) for more information.
+
+## Blockquotes
+
+> This is a blockquote with some important information.
+> It should be styled differently from regular text.
+
+## Improved Code Blocks
+
+Here is some `inline code` with background styling.
+
+## Combined Features
+
+Check out our **[documentation](https://docs.davincisolutions.ai)** for details.
+
+> **Note:** Code like `python app.py` should have grey background.
+"""
+
 # All test fixtures
 FIXTURES = {
     'simple': SIMPLE_DOC,
@@ -149,6 +172,7 @@ FIXTURES = {
     'complex': COMPLEX_DOC,
     'edge_cases': EDGE_CASES_DOC,
     'metadata': METADATA_DOC,
+    'new_features': NEW_FEATURES_DOC,
 }
 
 # Default config for testing

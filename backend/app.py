@@ -4,7 +4,7 @@ import markdown2
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, cm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image, Table, TableStyle, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image as RLImage, Table, TableStyle, HRFlowable
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT, TA_JUSTIFY
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
@@ -19,7 +19,7 @@ from datetime import datetime
 import base64
 from html.parser import HTMLParser
 import re
-from PIL import Image
+from PIL import Image as PILImage
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -164,13 +164,16 @@ class HTMLToReportLab(HTMLParser):
         self.in_cell = False
         self.in_bold = False
         self.in_italic = False
+        self.in_link = False
+        self.link_href = None
+        self.in_blockquote = False
         self.last_was_metadata = False  # Track if previous paragraph was metadata
         
     def handle_starttag(self, tag, attrs):
         # Flush any accumulated text before handling new tag (except for inline tags and br)
-        if self.current_text and tag not in ['strong', 'em', 'b', 'i', 'code', 'td', 'th', 'br'] and not self.in_cell:
+        if self.current_text and tag not in ['strong', 'em', 'b', 'i', 'code', 'a', 'td', 'th', 'br'] and not self.in_cell:
             self._flush_text()
-            
+
         if tag == 'h1':
             self.current_style = 'CustomHeading1'
         elif tag == 'h2':
@@ -204,6 +207,22 @@ class HTMLToReportLab(HTMLParser):
         elif tag in ['td', 'th'] and self.in_table:
             self.in_cell = True
             self.current_text = []
+        elif tag == 'a':
+            # Handle links - extract href and create clickable link
+            if not self.in_link:
+                self.in_link = True
+                # Get href attribute
+                href = None
+                for attr_name, attr_value in attrs:
+                    if attr_name == 'href':
+                        href = attr_value
+                        break
+                if href:
+                    self.link_href = href
+                    # ReportLab uses <link> tags with href and color
+                    self.current_text.append(f'<link href="{href}" color="blue"><u>')
+                else:
+                    self.in_link = False  # No href, treat as plain text
         elif tag == 'strong' or tag == 'b':
             if not self.in_bold:  # Avoid double nesting
                 self.in_bold = True
@@ -212,8 +231,70 @@ class HTMLToReportLab(HTMLParser):
             if not self.in_italic:  # Avoid double nesting
                 self.in_italic = True
                 self.current_text.append('<i>')
+        elif tag == 'img':
+            # Handle images - support both URLs and base64
+            src = None
+            alt = ''
+            width = None
+            height = None
+
+            for attr_name, attr_value in attrs:
+                if attr_name == 'src':
+                    src = attr_value
+                elif attr_name == 'alt':
+                    alt = attr_value
+                elif attr_name == 'width':
+                    try:
+                        width = float(attr_value)
+                    except:
+                        pass
+                elif attr_name == 'height':
+                    try:
+                        height = float(attr_value)
+                    except:
+                        pass
+
+            if src:
+                try:
+                    # Flush current text before adding image
+                    if self.current_text:
+                        self._flush_text()
+
+                    # Handle base64 encoded images
+                    if src.startswith('data:image'):
+                        # Extract base64 data
+                        if ',' in src:
+                            base64_data = src.split(',', 1)[1]
+                            image_data = base64.b64decode(base64_data)
+                            img_buffer = io.BytesIO(image_data)
+                            img = RLImage(img_buffer, width=width or 4*inch, height=height)
+                            self.story.append(img)
+                            self.story.append(Spacer(1, 12))
+                    else:
+                        # Handle URL or file path
+                        # For security, we'll skip external URLs in production
+                        # but support local file paths
+                        if src.startswith(('http://', 'https://')):
+                            # Could add URL image support here if needed
+                            # For now, add alt text as placeholder
+                            if alt:
+                                self.story.append(Paragraph(f'[Image: {alt}]', self.styles['CustomBody']))
+                        else:
+                            # Local file path
+                            if os.path.exists(src):
+                                img = RLImage(src, width=width or 4*inch, height=height)
+                                self.story.append(img)
+                                self.story.append(Spacer(1, 12))
+                except Exception as e:
+                    # If image fails, add alt text
+                    if alt:
+                        self.story.append(Paragraph(f'[Image: {alt}]', self.styles['CustomBody']))
+        elif tag == 'blockquote':
+            self.in_blockquote = True
+            self.current_style = 'BlockQuote'
         elif tag == 'code':
-            self.current_text.append('<font name="Courier">')
+            # Improved code styling with grey background
+            self.current_text.append('<font name="Courier" backColor="#F5F5F5">')
         elif tag == 'br':
             self.current_text.append('<br/>')
             
@@ -221,6 +302,15 @@ class HTMLToReportLab(HTMLParser):
         if tag in ['h1', 'h2', 'h3', 'p', 'li']:
             self._flush_text()
             self.current_style = 'CustomBody'
+        elif tag == 'blockquote':
+            self.in_blockquote = False
+            self._flush_text()
+            self.current_style = 'CustomBody'
+        elif tag == 'a':
+            if self.in_link:
+                self.in_link = False
+                self.current_text.append('</u></link>')
+                self.link_href = None
         elif tag == 'ul' or tag == 'ol':
             self.in_list = False
         elif tag == 'table' and self.in_table:
@@ -326,18 +416,25 @@ class HTMLToReportLab(HTMLParser):
                             self.story.append(Spacer(1, 10))
                         para = Paragraph(text, self.styles[style_to_use])
                     self.story.append(para)
-                    
+
                     # Only add extra spacing after bold text with colon if it's NOT metadata
                     # and we didn't already add spacing for a metadata transition
-                    if ('<b>' in text and '</b>' in text and ':' in text and 
+                    if ('<b>' in text and '</b>' in text and ':' in text and
                         not is_metadata and not self.last_was_metadata):
                         self.story.append(Spacer(1, 6))
-                    
+
                     self.last_was_metadata = is_metadata
-                except:
-                    # If paragraph fails (e.g., unclosed tags), add as plain text
+                except (KeyError, ValueError) as e:
+                    # If paragraph style is missing or text formatting fails, add as plain text
+                    app.logger.warning(f"Failed to create paragraph with style '{style_to_use}': {e}")
                     clean_text = re.sub(r'<[^>]+>', '', text)
-                    self.story.append(Paragraph(clean_text, self.styles[style_to_use]))
+                    self.story.append(Paragraph(clean_text, self.styles.get('CustomBody', self.styles['BodyText'])))
+                    self.last_was_metadata = False
+                except Exception as e:
+                    # Unexpected error - log and use fallback
+                    app.logger.error(f"Unexpected error creating paragraph: {e}")
+                    clean_text = re.sub(r'<[^>]+>', '', text)
+                    self.story.append(Paragraph(clean_text, self.styles.get('CustomBody', self.styles['BodyText'])))
                     self.last_was_metadata = False
         self.current_text = []
         
@@ -429,6 +526,24 @@ def create_pdf(markdown_text, config):
         spaceAfter=4,              # a touch more room for stacked metadata lines
         fontName='Helvetica'
     ))
+
+    # Add blockquote style
+    styles.add(ParagraphStyle(
+        name='BlockQuote',
+        parent=styles['BodyText'],
+        fontSize=11,
+        textColor=colors.HexColor('#666666'),
+        leftIndent=24,
+        rightIndent=24,
+        leading=15,
+        spaceBefore=12,
+        spaceAfter=12,
+        fontName='Helvetica-Oblique',
+        borderColor=colors.HexColor('#CCCCCC'),
+        borderWidth=0,
+        borderPadding=8,
+        backColor=colors.HexColor('#FAFAFA')
+    ))
     
     # Convert markdown to HTML with all features enabled
     html = markdown2.markdown(
@@ -519,10 +634,11 @@ def convert_markdown():
 
             # Verify it is an image Pillow can open
             try:
-                img = Image.open(io.BytesIO(logo_data))
+                img = PILImage.open(io.BytesIO(logo_data))
                 img.verify()  # Validate file integrity
-            except Exception:
-                return jsonify({"error": "Uploaded logo is not a valid image"}), 400
+            except Exception as e:
+                app.logger.warning(f"Invalid logo upload: {e}")
+                return jsonify({"error": f"Uploaded logo is not a valid image: {str(e)}"}), 400
 
             logo_path = '/tmp/temp_logo.png'
             with open(logo_path, 'wb') as f:
@@ -551,9 +667,15 @@ def convert_markdown():
             download_name=f'{title}-{datetime.now().strftime("%Y-%m-%d-%H%M%S")}.pdf'
         )
     
+    except ValueError as e:
+        app.logger.error('Invalid input: %s', str(e))
+        return jsonify({"error": f"Invalid input: {str(e)}"}), 400
+    except IOError as e:
+        app.logger.error('File I/O error: %s', str(e))
+        return jsonify({"error": f"File error: {str(e)}"}), 500
     except Exception as e:
-        app.logger.exception('Conversion failed: %s', str(e))
-        return jsonify({"error": str(e)}), 500
+        app.logger.exception('PDF conversion failed: %s', str(e))
+        return jsonify({"error": f"PDF generation failed: {str(e)}"}), 500
 
 # Removed unused /api/preview endpoint. Frontend does client-side preview.
 

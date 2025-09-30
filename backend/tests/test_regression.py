@@ -43,6 +43,8 @@ class TestPDFRegression(unittest.TestCase):
             # Save as new baseline
             baseline_path = self.tester.save_baseline(fixture_name, pdf_buffer)
             print(f"Saved baseline: {baseline_path}")
+            # When saving baselines, mark test as passed
+            self.assertTrue(True, f"Baseline saved for {fixture_name}")
             return
 
         # Compare to baseline
@@ -99,4 +101,10 @@ class TestPDFRegression(unittest.TestCase):
 if __name__ == '__main__':
     # Usage: python test_regression.py --save-baseline  (to create baselines)
     #        python test_regression.py                   (to test against baselines)
+
+    # Remove --save-baseline from sys.argv before unittest.main() processes it
+    # It's already been captured in setUpClass
+    if '--save-baseline' in sys.argv:
+        sys.argv.remove('--save-baseline')
+
     unittest.main()
