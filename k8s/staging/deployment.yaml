@@ -58,7 +58,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend-staging
+  name: backend
   namespace: doc-generator-staging
   labels:
     app: davinci-backend-staging
@@ -108,7 +108,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: davinci-frontend-staging
+  name: davinci-frontend
   namespace: doc-generator-staging
   labels:
     app: davinci-frontend-staging
