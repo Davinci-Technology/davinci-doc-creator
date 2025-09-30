@@ -23,6 +23,12 @@ spec:
           value: "production"
         - name: REQUIRE_AUTH
           value: "true"  # Azure AD authentication enabled
+        - name: TEST_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets
+              key: test-api-key
+              optional: true
         - name: AZURE_AD_TENANT_ID
           valueFrom:
             secretKeyRef:

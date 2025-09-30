@@ -40,6 +40,24 @@ auth = AzureADAuth(app)
 # Check if authentication is required
 REQUIRE_AUTH = os.environ.get('REQUIRE_AUTH', 'false').lower() == 'true'
 
+# Test API key for automated testing and health checks
+TEST_API_KEY = os.environ.get('TEST_API_KEY', None)
+
+def is_authenticated_request():
+    """Check if request is authenticated via API key or Azure AD session"""
+    # Check for test API key in header
+    if TEST_API_KEY:
+        api_key = request.headers.get('X-API-Key')
+        if api_key == TEST_API_KEY:
+            app.logger.info('Request authenticated with test API key')
+            return True
+
+    # Check for Azure AD session
+    if REQUIRE_AUTH and 'user' not in session:
+        return False
+
+    return True
+
 # Set up application logging to tmp/logs
 # Write logs under backend/tmp/logs so they are visible via the bind mount
 logs_dir = os.path.join(os.path.dirname(__file__), 'tmp', 'logs')
@@ -588,6 +606,11 @@ def health():
 
 @app.route('/api/convert', methods=['POST'])
 def convert_markdown():
+    # Check authentication
+    if not is_authenticated_request():
+        app.logger.warning('Unauthorized convert request')
+        return jsonify({"error": "Authentication required"}), 401
+
     try:
         data = request.json
         markdown_text = data.get('markdown', '')

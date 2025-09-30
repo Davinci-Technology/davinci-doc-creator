@@ -27,6 +27,12 @@ spec:
           value: "staging"
         - name: REQUIRE_AUTH
           value: "false"  # Disable auth in staging for easier testing
+        - name: TEST_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets-staging
+              key: test-api-key
+              optional: true
         - name: AZURE_AD_TENANT_ID
           valueFrom:
             secretKeyRef:
