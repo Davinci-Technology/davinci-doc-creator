@@ -243,7 +243,9 @@ class TestHTMLParser(unittest.TestCase):
 
         self.assertEqual(len(story), 1)
         text = str(story[0].text)
-        self.assertIn('<font name="Courier">', text)
+        # Check for improved code styling with grey background
+        self.assertIn('<font name="Courier" backColor="#F5F5F5">', text)
+        self.assertIn('some code', text)
 
     def test_special_characters(self):
         """Test HTML entity handling"""
