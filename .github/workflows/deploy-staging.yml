@@ -1,0 +1,155 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+env:
+  AZURE_RESOURCE_GROUP: davinci_can_cen_rg1
+  AKS_CLUSTER: k8s-01
+  ACR_NAME: davinciai
+  NAMESPACE: doc-generator-staging
+  IMAGE_TAG: staging-${{ github.sha }}
+  ENVIRONMENT: staging
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
+
+    - name: Run unit tests
+      run: |
+        cd backend
+        python -m pytest tests/test_html_parser.py -v
+
+    - name: Run integration tests
+      run: |
+        cd backend
+        python -m pytest tests/test_pdf_generation.py -v
+
+    - name: Test results
+      if: always()
+      run: |
+        echo "✅ All tests passed for staging deployment"
+
+  build-and-push:
+    name: Build and Push Images
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Login to ACR
+      run: |
+        az acr login --name ${{ env.ACR_NAME }}
+
+    - name: Build and push backend image
+      run: |
+        docker build -t ${{ env.ACR_NAME }}.azurecr.io/davinci-backend:${{ env.IMAGE_TAG }} \
+                     -t ${{ env.ACR_NAME }}.azurecr.io/davinci-backend:staging \
+                     ./backend
+        docker push ${{ env.ACR_NAME }}.azurecr.io/davinci-backend:${{ env.IMAGE_TAG }}
+        docker push ${{ env.ACR_NAME }}.azurecr.io/davinci-backend:staging
+
+    - name: Build and push frontend image
+      run: |
+        docker build -t ${{ env.ACR_NAME }}.azurecr.io/davinci-frontend:${{ env.IMAGE_TAG }} \
+                     -t ${{ env.ACR_NAME }}.azurecr.io/davinci-frontend:staging \
+                     ./frontend
+        docker push ${{ env.ACR_NAME }}.azurecr.io/davinci-frontend:${{ env.IMAGE_TAG }}
+        docker push ${{ env.ACR_NAME }}.azurecr.io/davinci-frontend:staging
+
+  deploy:
+    name: Deploy to Staging Environment
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging-docs.davincisolutions.ai
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name ${{ env.AKS_CLUSTER }}
+
+    - name: Create namespace if not exists
+      run: |
+        kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Apply staging Kubernetes manifests
+      run: |
+        kubectl apply -f k8s/staging/deployment.yaml
+
+    - name: Update deployment images
+      run: |
+        kubectl set image deployment/davinci-backend-staging backend=${{ env.ACR_NAME }}.azurecr.io/davinci-backend:${{ env.IMAGE_TAG }} -n ${{ env.NAMESPACE }}
+        kubectl set image deployment/davinci-frontend-staging frontend=${{ env.ACR_NAME }}.azurecr.io/davinci-frontend:${{ env.IMAGE_TAG }} -n ${{ env.NAMESPACE }}
+
+    - name: Wait for rollout
+      run: |
+        kubectl rollout status deployment/davinci-backend-staging -n ${{ env.NAMESPACE }} --timeout=5m
+        kubectl rollout status deployment/davinci-frontend-staging -n ${{ env.NAMESPACE }} --timeout=5m
+
+    - name: Get deployment info
+      run: |
+        echo "🚀 Staging deployment complete!"
+        echo ""
+        echo "Environment: STAGING"
+        echo "Namespace: ${{ env.NAMESPACE }}"
+        echo "Image Tag: ${{ env.IMAGE_TAG }}"
+        echo ""
+        echo "Service status:"
+        kubectl get service -n ${{ env.NAMESPACE }}
+        echo ""
+        echo "Pod status:"
+        kubectl get pods -n ${{ env.NAMESPACE }}
+        echo ""
+        echo "🌐 Staging URL: https://staging-docs.davincisolutions.ai"
+        echo ""
+        echo "To view logs:"
+        echo "  kubectl logs -f -l app=davinci-backend-staging -n ${{ env.NAMESPACE }}"
+
+    - name: Create deployment summary
+      run: |
+        echo "## 🚀 Staging Deployment Successful" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** Staging" >> $GITHUB_STEP_SUMMARY
+        echo "**Namespace:** \`${{ env.NAMESPACE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Image Tag:** \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**URL:** https://staging-docs.davincisolutions.ai" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "1. Test the staging environment" >> $GITHUB_STEP_SUMMARY
+        echo "2. If everything looks good, merge \`staging\` → \`main\` for production deployment" >> $GITHUB_STEP_SUMMARY

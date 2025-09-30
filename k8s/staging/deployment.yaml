@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: davinci-backend-staging
+  namespace: doc-generator-staging
+  labels:
+    app: davinci-backend-staging
+    environment: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: davinci-backend-staging
+  template:
+    metadata:
+      labels:
+        app: davinci-backend-staging
+        environment: staging
+    spec:
+      containers:
+      - name: backend
+        image: davinciai.azurecr.io/davinci-backend:staging
+        ports:
+        - containerPort: 5001
+        env:
+        - name: FLASK_ENV
+          value: "staging"
+        - name: REQUIRE_AUTH
+          value: "false"  # Disable auth in staging for easier testing
+        - name: AZURE_AD_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets-staging
+              key: azure-tenant-id
+              optional: true
+        - name: AZURE_AD_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets-staging
+              key: azure-client-id
+              optional: true
+        - name: AZURE_AD_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets-staging
+              key: azure-client-secret
+              optional: true
+        - name: AZURE_AD_REDIRECT_URI
+          value: "https://staging-docs.davincisolutions.ai/api/auth/callback"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "10m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-staging
+  namespace: doc-generator-staging
+  labels:
+    app: davinci-backend-staging
+    environment: staging
+spec:
+  selector:
+    app: davinci-backend-staging
+  ports:
+  - port: 5001
+    targetPort: 5001
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: davinci-frontend-staging
+  namespace: doc-generator-staging
+  labels:
+    app: davinci-frontend-staging
+    environment: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: davinci-frontend-staging
+  template:
+    metadata:
+      labels:
+        app: davinci-frontend-staging
+        environment: staging
+    spec:
+      containers:
+      - name: frontend
+        image: davinciai.azurecr.io/davinci-frontend:staging
+        ports:
+        - containerPort: 80
+        env:
+        # React app uses relative /api via NGINX; no build-time API URL needed
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: davinci-frontend-staging
+  namespace: doc-generator-staging
+  labels:
+    app: davinci-frontend-staging
+    environment: staging
+spec:
+  selector:
+    app: davinci-frontend-staging
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
