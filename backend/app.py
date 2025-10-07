@@ -8,6 +8,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, 
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT, TA_JUSTIFY
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPDF
+from reportlab.platypus.flowables import Flowable
 from reportlab.platypus import PageTemplate, Frame, BaseDocTemplate
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -477,6 +480,47 @@ class HTMLToReportLab(HTMLParser):
         self._flush_text()
         return self.story
 
+class SVGFlowable(Flowable):
+    """Custom flowable to render SVG graphics in ReportLab PDFs"""
+    def __init__(self, svg_path, width=None, height=None):
+        Flowable.__init__(self)
+        self.svg_path = svg_path
+        self.drawing = svg2rlg(svg_path)
+
+        if self.drawing:
+            # Get original dimensions
+            orig_width = self.drawing.width
+            orig_height = self.drawing.height
+            aspect_ratio = orig_height / orig_width
+
+            # Calculate dimensions
+            if width and not height:
+                self.width = width
+                self.height = width * aspect_ratio
+            elif height and not width:
+                self.height = height
+                self.width = height / aspect_ratio
+            elif width and height:
+                self.width = width
+                self.height = height
+            else:
+                self.width = orig_width
+                self.height = orig_height
+
+            # Scale the drawing
+            scale_x = self.width / orig_width
+            scale_y = self.height / orig_height
+            self.drawing.width = self.width
+            self.drawing.height = self.height
+            self.drawing.scale(scale_x, scale_y)
+        else:
+            self.width = 0
+            self.height = 0
+
+    def draw(self):
+        if self.drawing:
+            renderPDF.draw(self.drawing, self.canv, 0, 0)
+
 def create_title_page(config, styles, document_title):
     """Create a professional title page with company logo and document info"""
     story = []
@@ -487,27 +531,44 @@ def create_title_page(config, styles, document_title):
     # Company logo (centered, larger size) - use side-by-side logo for title page
     # First check for uploaded logo, otherwise use side-by-side default
     logo_path = config.get('logo_path')
+    use_svg = False
 
     # If no uploaded logo, use the side-by-side default logo for title page
     if not logo_path or not os.path.exists(logo_path):
-        # Try to find side-by-side logo in assets
-        sidebyside_logo = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo_sidebyside.png')
-        sidebyside_logo_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo_sidebyside.png')
+        # Try to find SVG side-by-side logo first (best quality)
+        sidebyside_svg = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo_sidebyside.svg')
+        sidebyside_svg_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo_sidebyside.svg')
+        sidebyside_png = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo_sidebyside.png')
+        sidebyside_png_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo_sidebyside.png')
 
-        if os.path.exists(sidebyside_logo):
-            logo_path = sidebyside_logo
-        elif os.path.exists(sidebyside_logo_parent):
-            logo_path = sidebyside_logo_parent
+        if os.path.exists(sidebyside_svg):
+            logo_path = sidebyside_svg
+            use_svg = True
+        elif os.path.exists(sidebyside_svg_parent):
+            logo_path = sidebyside_svg_parent
+            use_svg = True
+        elif os.path.exists(sidebyside_png):
+            logo_path = sidebyside_png
+        elif os.path.exists(sidebyside_png_parent):
+            logo_path = sidebyside_png_parent
 
     if logo_path and os.path.exists(logo_path):
         try:
             # Larger size for title page - 12cm wide
-            # Side-by-side logo ratio is ~3.36:1, so height = 12/3.36 ≈ 3.6cm
-            logo = RLImage(logo_path, width=12*cm, height=3.6*cm, kind='proportional')
-            logo.hAlign = 'CENTER'
-            story.append(logo)
+            if use_svg or logo_path.endswith('.svg'):
+                # Use SVG for perfect quality at any size
+                logo = SVGFlowable(logo_path, width=12*cm)
+                logo.hAlign = 'CENTER'
+                story.append(logo)
+            else:
+                # Fallback to PNG/raster image
+                # Side-by-side logo ratio is ~3.36:1, so height = 12/3.36 ≈ 3.6cm
+                logo = RLImage(logo_path, width=12*cm, height=3.6*cm, kind='proportional')
+                logo.hAlign = 'CENTER'
+                story.append(logo)
             story.append(Spacer(1, 0.75 * inch))
-        except:
+        except Exception as e:
+            app.logger.error(f"Error loading logo: {e}")
             pass
 
     # Document title - large, centered, bold
