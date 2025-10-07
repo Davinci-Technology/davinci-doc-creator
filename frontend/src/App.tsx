@@ -14,7 +14,9 @@ import {
   CardContent,
   Divider,
   IconButton,
-  Tooltip
+  Tooltip,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import {
   Download as DownloadIcon,
@@ -40,8 +42,6 @@ interface DocumentConfig {
   email?: string;
   disclaimer: string;
   logoBase64?: string;
-  includeTitlePage?: boolean;
-  includeSignaturePage?: boolean;
 }
 
 interface User {
@@ -105,9 +105,11 @@ Thank you for using the Davinci Document Creator!`);
     phone: '+1 (403) 245-9429',
     email: 'info@davincisolutions.ai',
     disclaimer: 'This document contains confidential and proprietary information of Davinci AI Solutions. © 2025 All Rights Reserved.',
-    includeTitlePage: false,
-    includeSignaturePage: false,
   });
+
+  // Template page options (per-document, not saved in config)
+  const [includeTitlePage, setIncludeTitlePage] = useState<boolean>(false);
+  const [includeSignaturePage, setIncludeSignaturePage] = useState<boolean>(false);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -144,6 +146,8 @@ Thank you for using the Davinci Document Creator!`);
         {
           markdown,
           ...config,
+          includeTitlePage,
+          includeSignaturePage,
         },
         {
           responseType: 'blob',
@@ -321,12 +325,6 @@ Thank you for using the Davinci Document Creator!`);
                       <Typography variant="body2" color="text.secondary">
                         Logo: {config.logoBase64 ? 'Uploaded' : 'Not uploaded'}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Title Page: {config.includeTitlePage ? 'Yes' : 'No'}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Signature Page: {config.includeSignaturePage ? 'Yes' : 'No'}
-                      </Typography>
                     </Box>
 
                     <Divider sx={{ my: 2 }} />
@@ -390,7 +388,30 @@ Thank you for using the Davinci Document Creator!`);
               {success}
             </Alert>
           )}
-          
+
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3, mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={includeTitlePage}
+                  onChange={(e) => setIncludeTitlePage(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="Include Title Page"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={includeSignaturePage}
+                  onChange={(e) => setIncludeSignaturePage(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="Include Signature Page"
+            />
+          </Box>
+
           <Button
             variant="contained"
             size="large"
