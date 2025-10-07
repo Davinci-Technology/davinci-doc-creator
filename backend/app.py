@@ -484,11 +484,26 @@ def create_title_page(config, styles, document_title):
     # Add large vertical spacer to center content
     story.append(Spacer(1, 2.5 * inch))
 
-    # Company logo (centered, larger size)
+    # Company logo (centered, larger size) - use side-by-side logo for title page
+    # First check for uploaded logo, otherwise use side-by-side default
     logo_path = config.get('logo_path')
+
+    # If no uploaded logo, use the side-by-side default logo for title page
+    if not logo_path or not os.path.exists(logo_path):
+        # Try to find side-by-side logo in assets
+        sidebyside_logo = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo_sidebyside.png')
+        sidebyside_logo_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo_sidebyside.png')
+
+        if os.path.exists(sidebyside_logo):
+            logo_path = sidebyside_logo
+        elif os.path.exists(sidebyside_logo_parent):
+            logo_path = sidebyside_logo_parent
+
     if logo_path and os.path.exists(logo_path):
         try:
-            logo = RLImage(logo_path, width=5*cm, height=1.5*cm, kind='proportional')
+            # Larger size for title page - 12cm wide
+            # Side-by-side logo ratio is ~3.36:1, so height = 12/3.36 ≈ 3.6cm
+            logo = RLImage(logo_path, width=12*cm, height=3.6*cm, kind='proportional')
             logo.hAlign = 'CENTER'
             story.append(logo)
             story.append(Spacer(1, 0.75 * inch))
