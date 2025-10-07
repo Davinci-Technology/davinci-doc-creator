@@ -557,18 +557,22 @@ def create_title_page(config, styles, document_title):
             # Larger size for title page - 12cm wide
             if use_svg or logo_path.endswith('.svg'):
                 # Use SVG for perfect quality at any size
+                app.logger.info(f"Using SVG logo for title page: {logo_path}")
                 logo = SVGFlowable(logo_path, width=12*cm)
                 logo.hAlign = 'CENTER'
                 story.append(logo)
             else:
                 # Fallback to PNG/raster image
+                app.logger.info(f"Using PNG logo for title page: {logo_path}")
                 # Side-by-side logo ratio is ~3.36:1, so height = 12/3.36 ≈ 3.6cm
                 logo = RLImage(logo_path, width=12*cm, height=3.6*cm, kind='proportional')
                 logo.hAlign = 'CENTER'
                 story.append(logo)
             story.append(Spacer(1, 0.75 * inch))
         except Exception as e:
-            app.logger.error(f"Error loading logo: {e}")
+            app.logger.error(f"Error loading logo for title page: {e}")
+            import traceback
+            app.logger.error(traceback.format_exc())
             pass
 
     # Document title - large, centered, bold
