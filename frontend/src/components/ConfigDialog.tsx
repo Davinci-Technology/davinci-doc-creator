@@ -9,7 +9,10 @@ import {
   Box,
   Typography,
   IconButton,
-  Alert
+  Alert,
+  FormControlLabel,
+  Checkbox,
+  Divider
 } from '@mui/material';
 import { Close as CloseIcon, CloudUpload as UploadIcon } from '@mui/icons-material';
 
@@ -19,6 +22,8 @@ interface DocumentConfig {
   phone: string;
   disclaimer: string;
   logoBase64?: string;
+  includeTitlePage?: boolean;
+  includeSignaturePage?: boolean;
 }
 
 interface ConfigDialogProps {
@@ -168,6 +173,42 @@ const ConfigDialog: React.FC<ConfigDialogProps> = ({ open, onClose, config, onSa
                 </Typography>
               </Box>
             )}
+          </Box>
+
+          <Divider sx={{ my: 3 }} />
+
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle2" gutterBottom fontWeight="bold">
+              Template Options
+            </Typography>
+
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={localConfig.includeTitlePage || false}
+                  onChange={(e) => setLocalConfig({ ...localConfig, includeTitlePage: e.target.checked })}
+                  color="primary"
+                />
+              }
+              label="Include Title Page"
+            />
+            <Typography variant="caption" display="block" sx={{ ml: 4, mt: -1, mb: 2, color: 'text.secondary' }}>
+              Add a professional title page before the document (not numbered)
+            </Typography>
+
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={localConfig.includeSignaturePage || false}
+                  onChange={(e) => setLocalConfig({ ...localConfig, includeSignaturePage: e.target.checked })}
+                  color="primary"
+                />
+              }
+              label="Include Signature Page"
+            />
+            <Typography variant="caption" display="block" sx={{ ml: 4, mt: -1, color: 'text.secondary' }}>
+              Add an approval signatures page after the document (numbered)
+            </Typography>
           </Box>
         </Box>
       </DialogContent>

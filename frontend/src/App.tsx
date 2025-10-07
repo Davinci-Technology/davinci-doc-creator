@@ -40,6 +40,8 @@ interface DocumentConfig {
   email?: string;
   disclaimer: string;
   logoBase64?: string;
+  includeTitlePage?: boolean;
+  includeSignaturePage?: boolean;
 }
 
 interface User {
@@ -103,6 +105,8 @@ Thank you for using the Davinci Document Creator!`);
     phone: '+1 (403) 245-9429',
     email: 'info@davincisolutions.ai',
     disclaimer: 'This document contains confidential and proprietary information of Davinci AI Solutions. © 2025 All Rights Reserved.',
+    includeTitlePage: false,
+    includeSignaturePage: false,
   });
 
   useEffect(() => {
@@ -316,6 +320,12 @@ Thank you for using the Davinci Document Creator!`);
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Logo: {config.logoBase64 ? 'Uploaded' : 'Not uploaded'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Title Page: {config.includeTitlePage ? 'Yes' : 'No'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Signature Page: {config.includeSignaturePage ? 'Yes' : 'No'}
                       </Typography>
                     </Box>
 

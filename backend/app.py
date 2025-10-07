@@ -80,7 +80,8 @@ class NumberedCanvas(canvas.Canvas):
         self.logo_path = kwargs.pop('logo_path', None)
         self.letterhead = kwargs.pop('letterhead', None)
         self.disclaimer = kwargs.pop('disclaimer', None)
-        
+        self.has_title_page = kwargs.pop('has_title_page', False)
+
         canvas.Canvas.__init__(self, *args, **kwargs)
         self._saved_page_states = []
         self.current_page_number = 1
@@ -91,15 +92,30 @@ class NumberedCanvas(canvas.Canvas):
         self._startPage()
 
     def save(self):
-        # Count total pages
+        # Count total pages (raw page count)
         num_pages = len(self._saved_page_states)
-        
+
+        # Calculate total numbered pages (exclude title page if present)
+        total_numbered_pages = num_pages - 1 if self.has_title_page else num_pages
+
         # Draw on each saved page
-        for page_num, state in enumerate(self._saved_page_states, start=1):
+        for page_index, state in enumerate(self._saved_page_states):
             self.__dict__.update(state)
-            # Set both current page and total pages for this page
-            self.current_page_number = page_num
-            self.total_pages = num_pages
+
+            # Skip numbering/header/footer for title page
+            if self.has_title_page and page_index == 0:
+                # Title page - no numbering, header, or footer
+                canvas.Canvas.showPage(self)
+                continue
+
+            # Calculate page number for content pages
+            # If title page exists, first content page is index 1 but numbered as "Page 1"
+            if self.has_title_page:
+                self.current_page_number = page_index  # index 1 becomes page 1
+            else:
+                self.current_page_number = page_index + 1  # index 0 becomes page 1
+
+            self.total_pages = total_numbered_pages
             self.draw_page_number()
             self.draw_header()
             self.draw_footer()
@@ -461,6 +477,139 @@ class HTMLToReportLab(HTMLParser):
         self._flush_text()
         return self.story
 
+def create_title_page(config, styles, document_title):
+    """Create a professional title page with company logo and document info"""
+    story = []
+
+    # Add large vertical spacer to center content
+    story.append(Spacer(1, 2.5 * inch))
+
+    # Company logo (centered, larger size)
+    logo_path = config.get('logo_path')
+    if logo_path and os.path.exists(logo_path):
+        try:
+            logo = RLImage(logo_path, width=5*cm, height=1.5*cm, kind='proportional')
+            logo.hAlign = 'CENTER'
+            story.append(logo)
+            story.append(Spacer(1, 0.75 * inch))
+        except:
+            pass
+
+    # Document title - large, centered, bold
+    title_style = ParagraphStyle(
+        name='TitlePageTitle',
+        parent=styles['Heading1'],
+        fontSize=28,
+        textColor=colors.HexColor('#0B98CE'),
+        alignment=TA_CENTER,
+        spaceAfter=24,
+        fontName='Helvetica-Bold',
+        leading=34
+    )
+    story.append(Paragraph(document_title or 'Document', title_style))
+
+    story.append(Spacer(1, 0.5 * inch))
+
+    # Company name
+    company_style = ParagraphStyle(
+        name='TitlePageCompany',
+        parent=styles['Heading2'],
+        fontSize=18,
+        textColor=colors.HexColor('#316EA8'),
+        alignment=TA_CENTER,
+        spaceAfter=12,
+        fontName='Helvetica-Bold'
+    )
+    letterhead = config.get('letterhead', {})
+    company_name = letterhead.get('company', 'Davinci AI Solutions')
+    story.append(Paragraph(company_name, company_style))
+
+    story.append(Spacer(1, 0.3 * inch))
+
+    # Date
+    date_style = ParagraphStyle(
+        name='TitlePageDate',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=colors.HexColor('#494949'),
+        alignment=TA_CENTER,
+        fontName='Helvetica'
+    )
+    current_date = datetime.now().strftime('%B %d, %Y')
+    story.append(Paragraph(current_date, date_style))
+
+    # Force page break after title page
+    story.append(PageBreak())
+
+    return story
+
+def create_signature_page(config, styles):
+    """Create a signature page with approval signature lines"""
+    story = []
+
+    # Force new page
+    story.append(PageBreak())
+
+    # Title
+    signature_title_style = ParagraphStyle(
+        name='SignatureTitle',
+        parent=styles['Heading1'],
+        fontSize=20,
+        textColor=colors.HexColor('#0B98CE'),
+        alignment=TA_CENTER,
+        spaceAfter=36,
+        spaceBefore=24,
+        fontName='Helvetica-Bold'
+    )
+    story.append(Paragraph('Approval Signatures', signature_title_style))
+
+    story.append(Spacer(1, 0.75 * inch))
+
+    # Signature lines (3 signature blocks)
+    signature_data = [
+        ['Prepared by:', ''],
+        ['', ''],
+        ['Name: _________________________________', 'Date: ___________________'],
+        ['Title: _________________________________', ''],
+        ['Signature: _____________________________', ''],
+        ['', ''],
+        ['', ''],
+        ['Reviewed by:', ''],
+        ['', ''],
+        ['Name: _________________________________', 'Date: ___________________'],
+        ['Title: _________________________________', ''],
+        ['Signature: _____________________________', ''],
+        ['', ''],
+        ['', ''],
+        ['Approved by:', ''],
+        ['', ''],
+        ['Name: _________________________________', 'Date: ___________________'],
+        ['Title: _________________________________', ''],
+        ['Signature: _____________________________', ''],
+    ]
+
+    signature_table = Table(signature_data, colWidths=[4.5*inch, 2*inch])
+    signature_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#494949')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        # Make section headers bold
+        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 7), (0, 7), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 14), (0, 14), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (0, 0), 12),
+        ('FONTSIZE', (0, 7), (0, 7), 12),
+        ('FONTSIZE', (0, 14), (0, 14), 12),
+    ]))
+    story.append(signature_table)
+
+    return story
+
 def create_pdf(markdown_text, config):
     buffer = io.BytesIO()
     
@@ -563,6 +712,14 @@ def create_pdf(markdown_text, config):
         backColor=colors.HexColor('#FAFAFA')
     ))
     
+    # Extract document title from first H1 for title page
+    document_title = None
+    lines = markdown_text.split('\n')
+    for line in lines:
+        if line.startswith('# '):
+            document_title = line[2:].strip()
+            break
+
     # Convert markdown to HTML with all features enabled
     html = markdown2.markdown(
         markdown_text,
@@ -575,16 +732,34 @@ def create_pdf(markdown_text, config):
             'task_list'
         ]
     )
-    
+
     # Use the HTML parser to create ReportLab flowables
     parser = HTMLToReportLab(styles)
     parser.feed(html)
-    story = parser.get_story()
-    
+    content_story = parser.get_story()
+
     # Ensure we have some content
-    if not story:
-        story.append(Paragraph("No content to display", styles['CustomBody']))
-    
+    if not content_story:
+        content_story.append(Paragraph("No content to display", styles['CustomBody']))
+
+    # Build complete story with optional title and signature pages
+    story = []
+    include_title_page = config.get('include_title_page', False)
+    include_signature_page = config.get('include_signature_page', False)
+
+    # Add title page if requested
+    if include_title_page:
+        title_page_story = create_title_page(config, styles, document_title)
+        story.extend(title_page_story)
+
+    # Add main content
+    story.extend(content_story)
+
+    # Add signature page if requested
+    if include_signature_page:
+        signature_page_story = create_signature_page(config, styles)
+        story.extend(signature_page_story)
+
     # Build PDF with custom canvas
     doc.build(
         story,
@@ -593,7 +768,8 @@ def create_pdf(markdown_text, config):
             **kwargs,
             logo_path=config.get('logo_path'),
             letterhead=config.get('letterhead'),
-            disclaimer=config.get('disclaimer')
+            disclaimer=config.get('disclaimer'),
+            has_title_page=include_title_page
         )
     )
     
@@ -640,7 +816,9 @@ def convert_markdown():
                 'email': data.get('email', 'info@davincisolutions.ai')
             },
             'disclaimer': data.get('disclaimer', 'This document contains confidential and proprietary information of Davinci AI Solutions. © 2025 All Rights Reserved.'),
-            'logo_path': None  # Will be handled separately
+            'logo_path': None,  # Will be handled separately
+            'include_title_page': data.get('includeTitlePage', False),
+            'include_signature_page': data.get('includeSignaturePage', False)
         }
         
         # Handle logo - accept both snake_case and camelCase, validate size/type
