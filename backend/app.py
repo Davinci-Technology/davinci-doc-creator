@@ -528,29 +528,27 @@ def create_title_page(config, styles, document_title):
     # Add large vertical spacer to center content
     story.append(Spacer(1, 2.5 * inch))
 
-    # Company logo (centered, larger size) - use side-by-side logo for title page
-    # First check for uploaded logo, otherwise use side-by-side default
-    logo_path = config.get('logo_path')
+    # Company logo (centered, larger size) - ALWAYS use side-by-side logo for title page
+    # The title page should always use the side-by-side logo, not the header logo
+    logo_path = None
     use_svg = False
 
-    # If no uploaded logo, use the side-by-side default logo for title page
-    if not logo_path or not os.path.exists(logo_path):
-        # Try to find SVG side-by-side logo first (best quality)
-        sidebyside_svg = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo_sidebyside.svg')
-        sidebyside_svg_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo_sidebyside.svg')
-        sidebyside_png = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo_sidebyside.png')
-        sidebyside_png_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo_sidebyside.png')
+    # Try to find SVG side-by-side logo first (best quality)
+    sidebyside_svg = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo_sidebyside.svg')
+    sidebyside_svg_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo_sidebyside.svg')
+    sidebyside_png = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo_sidebyside.png')
+    sidebyside_png_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo_sidebyside.png')
 
-        if os.path.exists(sidebyside_svg):
-            logo_path = sidebyside_svg
-            use_svg = True
-        elif os.path.exists(sidebyside_svg_parent):
-            logo_path = sidebyside_svg_parent
-            use_svg = True
-        elif os.path.exists(sidebyside_png):
-            logo_path = sidebyside_png
-        elif os.path.exists(sidebyside_png_parent):
-            logo_path = sidebyside_png_parent
+    if os.path.exists(sidebyside_svg):
+        logo_path = sidebyside_svg
+        use_svg = True
+    elif os.path.exists(sidebyside_svg_parent):
+        logo_path = sidebyside_svg_parent
+        use_svg = True
+    elif os.path.exists(sidebyside_png):
+        logo_path = sidebyside_png
+    elif os.path.exists(sidebyside_png_parent):
+        logo_path = sidebyside_png_parent
 
     if logo_path and os.path.exists(logo_path):
         try:
