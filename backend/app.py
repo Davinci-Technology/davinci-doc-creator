@@ -700,6 +700,14 @@ def create_signature_page(config, styles):
         ('LINEBELOW', (0, 4), (-1, 4), 0, colors.white),
         ('LINEABOVE', (0, 4), (-1, 4), 0, colors.white),
 
+        # Span Title/Role and Signature rows across full width (no Date column break)
+        # Davinci AI Solutions section
+        ('SPAN', (1, 2), (3, 2)),  # Title/Role spans from col 1 to 3
+        ('SPAN', (1, 3), (3, 3)),  # Signature spans from col 1 to 3
+        # Approved by section
+        ('SPAN', (1, 7), (3, 7)),  # Title/Role spans from col 1 to 3
+        ('SPAN', (1, 8), (3, 8)),  # Signature spans from col 1 to 3
+
         # Grid borders - light grey
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
         ('LINEABOVE', (0, 0), (-1, 0), 1, colors.HexColor('#0B98CE')),  # Blue line above Davinci section
