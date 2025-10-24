@@ -23,11 +23,13 @@ import {
   Description as DocumentIcon,
   Settings as SettingsIcon,
   Preview as PreviewIcon,
-  Logout as LogoutIcon
+  Logout as LogoutIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import ConfigDialog from './components/ConfigDialog';
+import DocuSignDialog from './components/DocuSignDialog';
 import Login from './Login';
 import './App.css';
 
@@ -97,6 +99,7 @@ Thank you for using the Davinci Document Creator!`);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
   const [configOpen, setConfigOpen] = useState<boolean>(false);
+  const [docuSignOpen, setDocuSignOpen] = useState<boolean>(false);
   const [showPreview, setShowPreview] = useState<boolean>(false);
   
   const [config, setConfig] = useState<DocumentConfig>({
@@ -197,6 +200,41 @@ Thank you for using the Davinci Document Creator!`);
   const handleConfigSave = (newConfig: DocumentConfig) => {
     setConfig(newConfig);
     setConfigOpen(false);
+  };
+
+  const handleSendForSignature = async (
+    recipientName: string,
+    recipientEmail: string,
+    emailSubject?: string,
+    emailMessage?: string
+  ) => {
+    const apiEndpoint = `${API_URL}/docusign/send-for-signature`;
+    console.log('Sending to DocuSign:', apiEndpoint);
+
+    try {
+      const response = await axios.post(apiEndpoint, {
+        markdown,
+        recipient_name: recipientName,
+        recipient_email: recipientEmail,
+        email_subject: emailSubject,
+        email_message: emailMessage,
+        ...config,
+        includeTitlePage,
+        includeSignaturePage: true, // Always include signature page for DocuSign
+      });
+
+      console.log('DocuSign response:', response.data);
+
+      setSuccess(
+        `Document sent successfully! ${recipientName} will receive an email with signing instructions. ` +
+        `Envelope ID: ${response.data.envelope_id}`
+      );
+      setDocuSignOpen(false);
+    } catch (err: any) {
+      console.error('DocuSign error:', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to send document for signature';
+      throw new Error(errorMessage);
+    }
   };
 
   const handleLogout = () => {
@@ -412,16 +450,30 @@ Thank you for using the Davinci Document Creator!`);
             />
           </Box>
 
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={loading ? <CircularProgress size={20} /> : <DownloadIcon />}
-            onClick={handleConvert}
-            disabled={loading || !markdown.trim()}
-            sx={{ px: 4, py: 1.5 }}
-          >
-            {loading ? 'Generating...' : 'Generate PDF'}
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={loading ? <CircularProgress size={20} /> : <DownloadIcon />}
+              onClick={handleConvert}
+              disabled={loading || !markdown.trim()}
+              sx={{ px: 4, py: 1.5 }}
+            >
+              {loading ? 'Generating...' : 'Download PDF'}
+            </Button>
+
+            <Button
+              variant="contained"
+              size="large"
+              color="secondary"
+              startIcon={<SendIcon />}
+              onClick={() => setDocuSignOpen(true)}
+              disabled={loading || !markdown.trim()}
+              sx={{ px: 4, py: 1.5 }}
+            >
+              Send for Signature
+            </Button>
+          </Box>
         </Box>
       </Container>
 
@@ -430,6 +482,12 @@ Thank you for using the Davinci Document Creator!`);
         onClose={() => setConfigOpen(false)}
         config={config}
         onSave={handleConfigSave}
+      />
+
+      <DocuSignDialog
+        open={docuSignOpen}
+        onClose={() => setDocuSignOpen(false)}
+        onSend={handleSendForSignature}
       />
     </>
   );

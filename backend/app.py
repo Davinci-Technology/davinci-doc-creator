@@ -26,6 +26,9 @@ from PIL import Image as PILImage
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from docusign_client import DocuSignClient
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -39,6 +42,17 @@ CORS(app,
 # Initialize Azure AD authentication
 from auth import AzureADAuth
 auth = AzureADAuth(app)
+
+# Initialize rate limiter for API endpoints
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Initialize DocuSign client
+docusign_client = DocuSignClient()
 
 # Check if authentication is required
 REQUIRE_AUTH = os.environ.get('REQUIRE_AUTH', 'false').lower() == 'true'
@@ -664,19 +678,60 @@ def create_signature_page(config, styles):
 
     # Signature table with proper borders - two signature blocks
     # Format: Header row, then fields (Name, Title/Role, Signature, Date)
+    # DocuSign anchor tags are embedded as invisible text markers
+
+    # Create anchor style (invisible markers for DocuSign)
+    anchor_style = ParagraphStyle(
+        name='Anchor',
+        parent=styles['BodyText'],
+        fontSize=1,
+        textColor=colors.white,
+        fontName='Helvetica'
+    )
+
     signature_data = [
-        # Davinci AI Solutions section
+        # Davinci AI Solutions section (Counter-signer - Ian Strom)
         ['Davinci AI Solutions', '', '', ''],
-        ['Name:', '', 'Date:', ''],
-        ['Title/Role:', '', '', ''],
-        ['Signature:', '', '', ''],
+        [
+            'Name:',
+            Paragraph('/ds_davinci_name/', anchor_style),  # Anchor for name field
+            'Date:',
+            Paragraph('/ds_davinci_date/', anchor_style)  # Anchor for date field
+        ],
+        [
+            'Title/Role:',
+            Paragraph('/ds_davinci_title/', anchor_style),  # Anchor for title field
+            '',
+            ''
+        ],
+        [
+            'Signature:',
+            Paragraph('/ds_davinci_signature/', anchor_style),  # Anchor for signature field
+            '',
+            ''
+        ],
         # Spacer row
         ['', '', '', ''],
-        # Approved by section
+        # Approved by section (Primary signer - External recipient)
         ['Approved by:', '', '', ''],
-        ['Name:', '', 'Date:', ''],
-        ['Title/Role:', '', '', ''],
-        ['Signature:', '', '', ''],
+        [
+            'Name:',
+            Paragraph('/ds_recipient_name/', anchor_style),  # Anchor for name field
+            'Date:',
+            Paragraph('/ds_recipient_date/', anchor_style)  # Anchor for date field
+        ],
+        [
+            'Title/Role:',
+            Paragraph('/ds_recipient_title/', anchor_style),  # Anchor for title field
+            '',
+            ''
+        ],
+        [
+            'Signature:',
+            Paragraph('/ds_recipient_signature/', anchor_style),  # Anchor for signature field
+            '',
+            ''
+        ],
     ]
 
     # Create table with 4 columns: label, value, label, value
@@ -1075,6 +1130,212 @@ def logout():
     # Redirect to Azure AD logout
     logout_url = f"https://login.microsoftonline.com/{auth.tenant_id}/oauth2/v2.0/logout"
     return redirect(logout_url)
+
+# DocuSign integration routes
+@app.route('/api/docusign/send-for-signature', methods=['POST'])
+@limiter.limit("10 per hour")
+def send_for_signature():
+    """
+    Generate PDF and send to DocuSign for signature
+
+    Request body:
+    {
+        "markdown": "...",
+        "recipient_name": "John Doe",
+        "recipient_email": "john@example.com",
+        "document_name": "Optional Document Name",
+        "email_subject": "Optional custom subject",
+        "email_message": "Optional custom message",
+        ... (all other PDF config options like company, address, includeTitlePage, etc.)
+    }
+    """
+    # Check authentication
+    if not is_authenticated_request():
+        app.logger.warning('Unauthorized DocuSign send request')
+        return jsonify({"error": "Authentication required"}), 401
+
+    try:
+        data = request.json
+
+        # Validate required fields
+        markdown_text = data.get('markdown', '')
+        recipient_name = data.get('recipient_name', '').strip()
+        recipient_email = data.get('recipient_email', '').strip()
+
+        if not markdown_text.strip():
+            return jsonify({"error": "markdown is required"}), 400
+        if not recipient_name:
+            return jsonify({"error": "recipient_name is required"}), 400
+        if not recipient_email:
+            return jsonify({"error": "recipient_email is required"}), 400
+
+        # Validate email format
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, recipient_email):
+            return jsonify({"error": "Invalid recipient_email format"}), 400
+
+        # Extract document title from first H1 header
+        document_name = data.get('document_name', 'Document')
+        if not document_name or document_name == 'Document':
+            lines = markdown_text.split('\n')
+            for line in lines:
+                if line.startswith('# '):
+                    document_name = line[2:].strip()
+                    break
+
+        # Build PDF configuration (same as /api/convert endpoint)
+        config = {
+            'letterhead': {
+                'company': data.get('company', 'Davinci AI Solutions'),
+                'address': data.get('address', '11-6320 11 Street SE, Calgary, AB T2H 2L7'),
+                'phone': data.get('phone', '+1 (403) 245-9429'),
+                'email': data.get('email', 'info@davincisolutions.ai')
+            },
+            'disclaimer': data.get('disclaimer', 'This document contains confidential and proprietary information of Davinci AI Solutions. © 2025 All Rights Reserved.'),
+            'logo_path': None,
+            'include_title_page': data.get('includeTitlePage', False),
+            'include_signature_page': data.get('includeSignaturePage', True)  # Force signature page for DocuSign
+        }
+
+        # Handle logo (same as /api/convert)
+        logo_b64 = data.get('logo_base64') or data.get('logoBase64')
+        if logo_b64:
+            try:
+                logo_data = base64.b64decode(logo_b64)
+                if len(logo_data) > 5 * 1024 * 1024:
+                    return jsonify({"error": "Logo image exceeds 5MB limit"}), 400
+
+                img = PILImage.open(io.BytesIO(logo_data))
+                img.verify()
+
+                logo_path = '/tmp/temp_logo_docusign.png'
+                with open(logo_path, 'wb') as f:
+                    f.write(logo_data)
+                config['logo_path'] = logo_path
+            except Exception as e:
+                app.logger.warning(f"Invalid logo upload for DocuSign: {e}")
+                return jsonify({"error": f"Invalid logo: {str(e)}"}), 400
+        else:
+            # Use default Davinci logo
+            default_logo_png = os.path.join(os.path.dirname(__file__), 'assets', 'logos', 'davinci_logo.png')
+            default_logo_png_parent = os.path.join(os.path.dirname(__file__), '..', 'assets', 'logos', 'davinci_logo.png')
+            if os.path.exists(default_logo_png):
+                config['logo_path'] = default_logo_png
+            elif os.path.exists(default_logo_png_parent):
+                config['logo_path'] = default_logo_png_parent
+
+        # Generate PDF with anchor tags
+        app.logger.info(f'Generating PDF for DocuSign: {document_name}')
+        pdf_buffer = create_pdf(markdown_text, config)
+
+        # Send to DocuSign
+        app.logger.info(f'Sending to DocuSign: recipient={recipient_email}')
+        result = docusign_client.send_envelope_for_signature(
+            pdf_buffer=pdf_buffer,
+            recipient_name=recipient_name,
+            recipient_email=recipient_email,
+            document_name=document_name,
+            email_subject=data.get('email_subject'),
+            email_message=data.get('email_message', '')
+        )
+
+        app.logger.info(f'DocuSign envelope created: {result["envelope_id"]}')
+
+        return jsonify({
+            'success': True,
+            'envelope_id': result['envelope_id'],
+            'status': result['status'],
+            'recipient': result['recipient'],
+            'counter_signer': result['counter_signer'],
+            'message': 'Document sent for signature successfully'
+        }), 200
+
+    except ValueError as e:
+        app.logger.error(f'DocuSign validation error: {e}')
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        app.logger.exception(f'DocuSign send failed: {e}')
+        return jsonify({"error": f"Failed to send document for signature: {str(e)}"}), 500
+
+@app.route('/api/docusign/envelope/<envelope_id>/status', methods=['GET'])
+def get_envelope_status(envelope_id):
+    """
+    Get the current status of a DocuSign envelope
+
+    Returns:
+    {
+        "envelope_id": "...",
+        "status": "sent|delivered|completed|...",
+        "created_date_time": "...",
+        "sent_date_time": "...",
+        "completed_date_time": "...",
+        "signers": [
+            {
+                "name": "...",
+                "email": "...",
+                "status": "sent|delivered|completed",
+                "routing_order": 1,
+                "signed_date_time": "..."
+            }
+        ]
+    }
+    """
+    # Check authentication
+    if not is_authenticated_request():
+        app.logger.warning('Unauthorized DocuSign status request')
+        return jsonify({"error": "Authentication required"}), 401
+
+    try:
+        app.logger.info(f'Getting DocuSign envelope status: {envelope_id}')
+        status = docusign_client.get_envelope_status(envelope_id)
+        return jsonify(status), 200
+
+    except Exception as e:
+        app.logger.exception(f'Failed to get envelope status: {e}')
+        return jsonify({"error": f"Failed to get envelope status: {str(e)}"}), 500
+
+@app.route('/api/docusign/webhook', methods=['POST'])
+def docusign_webhook():
+    """
+    Receive DocuSign event notifications (webhook)
+
+    DocuSign will POST event data when envelopes change status:
+    - envelope-sent
+    - envelope-delivered
+    - envelope-completed
+    - recipient-completed
+
+    This endpoint logs events and can be extended to:
+    - Send notifications to users
+    - Update database records
+    - Trigger workflows
+    """
+    try:
+        event_data = request.json
+
+        # Log the event
+        event_type = event_data.get('event')
+        envelope_id = event_data.get('data', {}).get('envelopeId', 'unknown')
+
+        app.logger.info(f'DocuSign webhook received: event={event_type} envelope={envelope_id}')
+        app.logger.debug(f'Webhook data: {event_data}')
+
+        # TODO: Add business logic here:
+        # - Send email notifications
+        # - Update database
+        # - Trigger workflows
+        # - Store signed documents
+
+        # For now, just acknowledge receipt
+        return jsonify({
+            'success': True,
+            'message': 'Webhook received'
+        }), 200
+
+    except Exception as e:
+        app.logger.exception(f'DocuSign webhook processing failed: {e}')
+        # Return 200 anyway to prevent DocuSign from retrying
+        return jsonify({'success': False}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001, host='0.0.0.0')
