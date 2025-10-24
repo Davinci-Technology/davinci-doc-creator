@@ -10,4 +10,4 @@ PyJWT==2.8.0
 cryptography==41.0.7
 requests==2.31.0
 flask-limiter==3.5.0
-docusign-esign==3.28.0
+docusign-esign==3.26.0
