@@ -622,47 +622,66 @@ def create_title_page(config, styles, document_title):
     return story
 
 def create_signature_page(config, styles):
-    """Create a signature page with approval signature lines"""
+    """Create a signature page with approval context and signature lines"""
     story = []
 
-    # Force new page
+    # Force new page - signature page should be separate
     story.append(PageBreak())
 
-    # Title
+    # Left-aligned title - feels like a document section heading
     signature_title_style = ParagraphStyle(
         name='SignatureTitle',
-        parent=styles['Heading1'],
-        fontSize=20,
+        parent=styles['Heading2'],
+        fontSize=16,
         textColor=colors.HexColor('#0B98CE'),
-        alignment=TA_CENTER,
-        spaceAfter=36,
-        spaceBefore=24,
+        alignment=TA_LEFT,
+        spaceAfter=12,
+        spaceBefore=0,
         fontName='Helvetica-Bold'
     )
-    story.append(Paragraph('Approval Signatures', signature_title_style))
+    story.append(Paragraph('Approval & Signatures', signature_title_style))
 
-    story.append(Spacer(1, 0.75 * inch))
+    # Friendly preamble - clear explanation in plain English
+    preamble_style = ParagraphStyle(
+        name='SignaturePreamble',
+        parent=styles['BodyText'],
+        fontSize=11,
+        textColor=colors.HexColor('#494949'),
+        alignment=TA_LEFT,
+        leading=16,
+        spaceBefore=8,
+        spaceAfter=24,
+        fontName='Helvetica'
+    )
+
+    preamble_text = (
+        "By signing below, you acknowledge that you have reviewed this document "
+        "and agree with its contents, recommendations, and proposed course of action. "
+        "Your signature confirms your approval to proceed as outlined in this document."
+    )
+
+    story.append(Paragraph(preamble_text, preamble_style))
 
     # Signature lines (3 signature blocks)
     signature_data = [
         ['Prepared by:', ''],
         ['', ''],
         ['Name: _________________________________', 'Date: ___________________'],
-        ['Title: _________________________________', ''],
+        ['Title/Role: ____________________________', ''],
         ['Signature: _____________________________', ''],
         ['', ''],
         ['', ''],
         ['Reviewed by:', ''],
         ['', ''],
         ['Name: _________________________________', 'Date: ___________________'],
-        ['Title: _________________________________', ''],
+        ['Title/Role: ____________________________', ''],
         ['Signature: _____________________________', ''],
         ['', ''],
         ['', ''],
         ['Approved by:', ''],
         ['', ''],
         ['Name: _________________________________', 'Date: ___________________'],
-        ['Title: _________________________________', ''],
+        ['Title/Role: ____________________________', ''],
         ['Signature: _____________________________', ''],
     ]
 
