@@ -662,46 +662,61 @@ def create_signature_page(config, styles):
 
     story.append(Paragraph(preamble_text, preamble_style))
 
-    # Signature lines (3 signature blocks)
+    # Signature table with proper borders - two signature blocks
+    # Format: Header row, then fields (Name, Title/Role, Signature, Date)
     signature_data = [
-        ['Prepared by:', ''],
-        ['', ''],
-        ['Name: _________________________________', 'Date: ___________________'],
-        ['Title/Role: ____________________________', ''],
-        ['Signature: _____________________________', ''],
-        ['', ''],
-        ['', ''],
-        ['Reviewed by:', ''],
-        ['', ''],
-        ['Name: _________________________________', 'Date: ___________________'],
-        ['Title/Role: ____________________________', ''],
-        ['Signature: _____________________________', ''],
-        ['', ''],
-        ['', ''],
-        ['Approved by:', ''],
-        ['', ''],
-        ['Name: _________________________________', 'Date: ___________________'],
-        ['Title/Role: ____________________________', ''],
-        ['Signature: _____________________________', ''],
+        # Davinci AI Solutions section
+        ['Davinci AI Solutions', '', '', ''],
+        ['Name:', '', 'Date:', ''],
+        ['Title/Role:', '', '', ''],
+        ['Signature:', '', '', ''],
+        # Spacer row
+        ['', '', '', ''],
+        # Approved by section
+        ['Approved by:', '', '', ''],
+        ['Name:', '', 'Date:', ''],
+        ['Title/Role:', '', '', ''],
+        ['Signature:', '', '', ''],
     ]
 
-    signature_table = Table(signature_data, colWidths=[4.5*inch, 2*inch])
+    # Create table with 4 columns: label, value, label, value
+    signature_table = Table(signature_data, colWidths=[1.2*inch, 2.3*inch, 0.8*inch, 1.7*inch])
     signature_table.setStyle(TableStyle([
+        # Font and text settings
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
         ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#494949')),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        # Make section headers bold
+
+        # Section headers (row 0 and row 5) - bold, larger, span all columns
         ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
-        ('FONTNAME', (0, 7), (0, 7), 'Helvetica-Bold'),
-        ('FONTNAME', (0, 14), (0, 14), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (0, 0), 12),
-        ('FONTSIZE', (0, 7), (0, 7), 12),
-        ('FONTSIZE', (0, 14), (0, 14), 12),
+        ('SPAN', (0, 0), (-1, 0)),  # Davinci AI Solutions header spans all columns
+        ('FONTNAME', (0, 5), (0, 5), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 5), (0, 5), 12),
+        ('SPAN', (0, 5), (-1, 5)),  # Approved by header spans all columns
+
+        # Spacer row (row 4) - no borders
+        ('SPAN', (0, 4), (-1, 4)),
+        ('LINEBELOW', (0, 4), (-1, 4), 0, colors.white),
+        ('LINEABOVE', (0, 4), (-1, 4), 0, colors.white),
+
+        # Grid borders - light grey
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+        ('LINEABOVE', (0, 0), (-1, 0), 1, colors.HexColor('#0B98CE')),  # Blue line above Davinci section
+        ('LINEABOVE', (0, 5), (-1, 5), 1, colors.HexColor('#0B98CE')),  # Blue line above Approved section
+
+        # Padding
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+
+        # Alignment
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+
+        # Background color for header rows
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F0F8FF')),  # Light blue for Davinci
+        ('BACKGROUND', (0, 5), (-1, 5), colors.HexColor('#F0F8FF')),  # Light blue for Approved
     ]))
     story.append(signature_table)
 
