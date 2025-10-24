@@ -468,7 +468,7 @@ Thank you for using the Davinci Document Creator!`);
               color="secondary"
               startIcon={<SendIcon />}
               onClick={() => setDocuSignOpen(true)}
-              disabled={loading || !markdown.trim()}
+              disabled={loading || !markdown.trim() || !includeSignaturePage}
               sx={{ px: 4, py: 1.5 }}
             >
               Send for Signature
