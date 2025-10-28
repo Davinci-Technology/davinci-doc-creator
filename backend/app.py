@@ -367,33 +367,59 @@ class HTMLToReportLab(HTMLParser):
         elif tag == 'table' and self.in_table:
             self.in_table = False
             if self.table_data:
-                # Clean up table data - convert HTML tags in cells to ReportLab format
-                # All cells will be Paragraphs for proper wrapping
+                # Create a special style for table cells that prevents word breaking
+                from reportlab.lib.enums import TA_LEFT
+                table_cell_style = ParagraphStyle(
+                    'TableCell',
+                    parent=self.styles['CustomBody'],
+                    fontSize=9,
+                    wordWrap='LTR',  # Left-to-right word wrap
+                    splitLongWords=False,  # Don't split long words
+                    allowWidows=1,
+                    allowOrphans=1
+                )
+
+                # Process table data intelligently
                 cleaned_data = []
-                for row in self.table_data:
+                num_cols = len(self.table_data[0]) if self.table_data else 0
+
+                for row_idx, row in enumerate(self.table_data):
                     cleaned_row = []
-                    for cell in row:
-                        # Wrap all cells in Paragraph for text wrapping
+                    for col_idx, cell in enumerate(row):
                         if isinstance(cell, str):
-                            cleaned_row.append(Paragraph(cell, self.styles['CustomBody']))
+                            cell_stripped = cell.strip()
+
+                            # Determine if this cell should be plain text or wrapped
+                            # Use plain text for: numbers, currency, short labels, hours
+                            is_short = len(cell_stripped) < 30
+                            is_numeric = any(c in cell_stripped for c in ['$', 'CAD', 'hrs', '%'])
+                            is_header = row_idx == 0
+
+                            # Last 3 columns are usually numeric (hours, rate, total)
+                            is_last_columns = col_idx >= num_cols - 3
+
+                            if is_last_columns or (is_short and is_numeric) or is_header:
+                                # Use plain text for numbers and headers to prevent word breaking
+                                cleaned_row.append(cell_stripped)
+                            else:
+                                # Use Paragraph with no-break style for descriptive text
+                                cleaned_row.append(Paragraph(cell_stripped, table_cell_style))
                         else:
                             cleaned_row.append(cell)
                     cleaned_data.append(cleaned_row)
 
                 # Calculate column widths dynamically
                 # Available width: letter (8.5") - left margin (1") - right margin (1") = 6.5 inches
-                num_cols = len(cleaned_data[0]) if cleaned_data else 0
                 available_width = 6.5 * inch
 
                 if num_cols > 0:
                     # Distribute width based on content: wider for description columns
-                    # Common pattern: first col (label), middle cols (description), last cols (numbers)
                     if num_cols == 5:
                         # Phase/Deliverable | Description | Hours | Rate | Total
-                        col_widths = [1.4*inch, 2.6*inch, 0.8*inch, 0.7*inch, 0.7*inch]
+                        col_widths = [1.5*inch, 2.8*inch, 0.8*inch, 0.6*inch, 0.8*inch]
                     elif num_cols == 4:
-                        # License | Description | Users | Per User/Month | Total
-                        col_widths = [1.5*inch, 3.0*inch, 0.8*inch, 1.0*inch]
+                        # Service/License | Description | Users/Rate | Total
+                        col_widths = [1.6*inch, 2.9*inch, 0.9*inch, 1.1*inch]
                     elif num_cols == 3:
                         col_widths = [available_width * 0.3, available_width * 0.4, available_width * 0.3]
                     elif num_cols == 2:
@@ -411,15 +437,15 @@ class HTMLToReportLab(HTMLParser):
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#494949')),
                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('FONTSIZE', (0, 0), (-1, 0), 9),
                     ('BACKGROUND', (0, 1), (-1, -1), colors.white),
                     ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#CCCCCC')),
                     ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                     ('FONTSIZE', (0, 1), (-1, -1), 9),
-                    ('TOPPADDING', (0, 0), (-1, -1), 10),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                    ('TOPPADDING', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ]))
                 self.story.append(table)
