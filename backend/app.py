@@ -368,21 +368,44 @@ class HTMLToReportLab(HTMLParser):
             self.in_table = False
             if self.table_data:
                 # Clean up table data - convert HTML tags in cells to ReportLab format
+                # All cells will be Paragraphs for proper wrapping
                 cleaned_data = []
                 for row in self.table_data:
                     cleaned_row = []
                     for cell in row:
-                        # Process cell content to handle bold tags properly
-                        if '<b>' in cell and '</b>' in cell:
-                            # Cell has bold content - wrap in Paragraph for proper rendering
+                        # Wrap all cells in Paragraph for text wrapping
+                        if isinstance(cell, str):
                             cleaned_row.append(Paragraph(cell, self.styles['CustomBody']))
                         else:
-                            # Plain text cell
                             cleaned_row.append(cell)
                     cleaned_data.append(cleaned_row)
-                
-                # Create table with styling
-                table = Table(cleaned_data)
+
+                # Calculate column widths dynamically
+                # Available width: letter (8.5") - left margin (1") - right margin (1") = 6.5 inches
+                num_cols = len(cleaned_data[0]) if cleaned_data else 0
+                available_width = 6.5 * inch
+
+                if num_cols > 0:
+                    # Distribute width based on content: wider for description columns
+                    # Common pattern: first col (label), middle cols (description), last cols (numbers)
+                    if num_cols == 5:
+                        # Phase/Deliverable | Description | Hours | Rate | Total
+                        col_widths = [1.4*inch, 2.6*inch, 0.8*inch, 0.7*inch, 0.7*inch]
+                    elif num_cols == 4:
+                        # License | Description | Users | Per User/Month | Total
+                        col_widths = [1.5*inch, 3.0*inch, 0.8*inch, 1.0*inch]
+                    elif num_cols == 3:
+                        col_widths = [available_width * 0.3, available_width * 0.4, available_width * 0.3]
+                    elif num_cols == 2:
+                        col_widths = [available_width * 0.4, available_width * 0.6]
+                    else:
+                        # Equal distribution for other cases
+                        col_widths = [available_width / num_cols] * num_cols
+                else:
+                    col_widths = None
+
+                # Create table with calculated widths
+                table = Table(cleaned_data, colWidths=col_widths)
                 table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F0F0F0')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#494949')),
@@ -887,9 +910,23 @@ def create_pdf(markdown_text, config):
         backColor=colors.HexColor('#FAFAFA')
     ))
     
+    # Preprocess markdown to fix horizontal rules
+    # Convert lines of repeated =, -, or _ into proper markdown horizontal rules (---)
+    lines = markdown_text.split('\n')
+    processed_lines = []
+    for line in lines:
+        stripped = line.strip()
+        # Check if line is only repeated =, -, _, or ■ characters (min 3)
+        if len(stripped) >= 3 and all(c in '=-_■' for c in stripped):
+            # Replace with markdown horizontal rule
+            processed_lines.append('---')
+        else:
+            processed_lines.append(line)
+
+    markdown_text = '\n'.join(processed_lines)
+
     # Extract document title from first H1 for title page
     document_title = None
-    lines = markdown_text.split('\n')
     for line in lines:
         if line.startswith('# '):
             document_title = line[2:].strip()
