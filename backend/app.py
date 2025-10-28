@@ -417,8 +417,9 @@ class HTMLToReportLab(HTMLParser):
                 if num_cols > 0:
                     # Distribute width based on content: wider for description columns
                     if num_cols == 5:
-                        # Phase/Deliverable | Description | Hours | Rate | Total
-                        col_widths = [1.5*inch, 2.8*inch, 0.8*inch, 0.6*inch, 0.8*inch]
+                        # Phase/Deliverable | Description | Estimated Hours | Rate | Total
+                        # Adjusted widths to prevent header text overlap
+                        col_widths = [1.4*inch, 2.4*inch, 1.0*inch, 0.8*inch, 0.9*inch]
                     elif num_cols == 4:
                         # Service/License | Description | Users/Rate | Total
                         col_widths = [1.6*inch, 2.9*inch, 0.9*inch, 1.1*inch]
