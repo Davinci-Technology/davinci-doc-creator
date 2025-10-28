@@ -400,7 +400,9 @@ class HTMLToReportLab(HTMLParser):
 
                             if is_last_columns or (is_short and is_numeric) or is_header:
                                 # Use plain text for numbers and headers to prevent word breaking
-                                cleaned_row.append(cell_stripped)
+                                # Strip HTML tags from plain text cells
+                                cell_plain = re.sub(r'<[^>]+>', '', cell_stripped)
+                                cleaned_row.append(cell_plain)
                             else:
                                 # Use Paragraph with no-break style for descriptive text
                                 cleaned_row.append(Paragraph(cell_stripped, table_cell_style))
