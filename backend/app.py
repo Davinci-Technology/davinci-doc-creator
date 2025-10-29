@@ -939,17 +939,27 @@ def create_pdf(markdown_text, config):
         backColor=colors.HexColor('#FAFAFA')
     ))
     
-    # Preprocess markdown to fix horizontal rules
+    # Preprocess markdown to fix horizontal rules and ensure tables parse correctly
     # Convert lines of repeated =, -, or _ into proper markdown horizontal rules (---)
     lines = markdown_text.split('\n')
     processed_lines = []
-    for line in lines:
+    for i, line in enumerate(lines):
         stripped = line.strip()
+
         # Check if line is only repeated =, -, _, or ■ characters (min 3)
         if len(stripped) >= 3 and all(c in '=-_■' for c in stripped):
             # Replace with markdown horizontal rule
             processed_lines.append('---')
         else:
+            # Check if this line starts a markdown table (starts with |)
+            # and ensure there's a blank line before it
+            if stripped.startswith('|') and i > 0:
+                prev_line = lines[i-1].strip()
+                # If previous line is not blank and we just added a non-blank line
+                if prev_line and len(processed_lines) > 0 and processed_lines[-1].strip():
+                    # Insert blank line before table
+                    processed_lines.append('')
+
             processed_lines.append(line)
 
     markdown_text = '\n'.join(processed_lines)
