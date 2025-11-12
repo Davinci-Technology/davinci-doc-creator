@@ -1003,12 +1003,28 @@ def create_pdf(markdown_text, config):
     # Convert lines of repeated =, -, or _ into proper markdown horizontal rules (---)
     lines = markdown_text.split('\n')
     processed_lines = []
+    in_table = False
+
     for i, line in enumerate(lines):
         stripped = line.strip()
 
+        # Detect if we're starting a table
+        is_table_line = stripped.startswith('|') and '|' in stripped[1:]
+
         # Check if line is a markdown table separator (contains pipes and dashes)
         # e.g., |---|---|---| - this should NOT be converted to a horizontal rule
-        is_table_separator = '|' in stripped and '-' in stripped and stripped.count('|') >= 2
+        is_table_separator = is_table_line and '-' in stripped
+
+        # Track if we're in a table
+        if is_table_line:
+            if not in_table and len(processed_lines) > 0:
+                # Starting a new table - ensure blank line before it
+                if processed_lines[-1].strip():  # Previous line is not blank
+                    processed_lines.append('')
+            in_table = True
+        elif in_table and not is_table_line:
+            # Exited table
+            in_table = False
 
         # Check if line is only repeated =, -, _, or ■ characters (min 3)
         # BUT exclude table separator lines
@@ -1018,15 +1034,6 @@ def create_pdf(markdown_text, config):
             # Replace with markdown horizontal rule
             processed_lines.append('---')
         else:
-            # Check if this line starts a markdown table (starts with |)
-            # and ensure there's a blank line before it
-            if stripped.startswith('|') and i > 0:
-                prev_line = lines[i-1].strip()
-                # If previous line is not blank and we just added a non-blank line
-                if prev_line and len(processed_lines) > 0 and processed_lines[-1].strip():
-                    # Insert blank line before table
-                    processed_lines.append('')
-
             processed_lines.append(line)
 
     markdown_text = '\n'.join(processed_lines)
