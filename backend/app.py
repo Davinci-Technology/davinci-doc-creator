@@ -981,8 +981,15 @@ def create_pdf(markdown_text, config):
     for i, line in enumerate(lines):
         stripped = line.strip()
 
+        # Check if line is a markdown table separator (contains pipes and dashes)
+        # e.g., |---|---|---| - this should NOT be converted to a horizontal rule
+        is_table_separator = '|' in stripped and '-' in stripped and stripped.count('|') >= 2
+
         # Check if line is only repeated =, -, _, or ■ characters (min 3)
-        if len(stripped) >= 3 and all(c in '=-_■' for c in stripped):
+        # BUT exclude table separator lines
+        if (len(stripped) >= 3 and
+            all(c in '=-_■' for c in stripped) and
+            not is_table_separator):
             # Replace with markdown horizontal rule
             processed_lines.append('---')
         else:
