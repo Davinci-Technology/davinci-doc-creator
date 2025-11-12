@@ -91,6 +91,41 @@ except Exception:
     # Fallback to default logger if filesystem not writable
     pass
 
+def merge_consecutive_lists(html):
+    """
+    Merge consecutive list blocks separated by whitespace.
+
+    When markdown has blank lines between list items, markdown2 creates
+    separate <ul> or <ol> blocks. This merges them back together for
+    cleaner PDF rendering.
+
+    Example:
+        <ul><li>Item 1</li></ul>
+        <ul><li>Item 2</li></ul>
+    Becomes:
+        <ul><li>Item 1</li><li>Item 2</li></ul>
+
+    Args:
+        html: HTML string to process
+
+    Returns:
+        HTML string with consecutive lists merged
+    """
+    # Remove empty paragraphs between list items within the same list
+    html = re.sub(r'</li>\s*<p>\s*</p>\s*<li>', '</li>\n<li>', html, flags=re.DOTALL)
+
+    # Merge consecutive <ul> blocks
+    html = re.sub(r'</ul>\s*<ul>', '\n', html, flags=re.DOTALL)
+
+    # Merge consecutive <ol> blocks
+    html = re.sub(r'</ol>\s*<ol>', '\n', html, flags=re.DOTALL)
+
+    # Also merge lists separated by a single paragraph break
+    html = re.sub(r'</ul>\s*<p>\s*</p>\s*<ul>', '\n', html, flags=re.DOTALL)
+    html = re.sub(r'</ol>\s*<p>\s*</p>\s*<ol>', '\n', html, flags=re.DOTALL)
+
+    return html
+
 class NumberedCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
         # Extract custom parameters before passing to Canvas
@@ -983,6 +1018,10 @@ def create_pdf(markdown_text, config):
             'task_list'
         ]
     )
+
+    # Post-process HTML to merge consecutive lists for cleaner rendering
+    # This handles cases where markdown has blank lines between list items
+    html = merge_consecutive_lists(html)
 
     # Use the HTML parser to create ReportLab flowables
     parser = HTMLToReportLab(styles)
