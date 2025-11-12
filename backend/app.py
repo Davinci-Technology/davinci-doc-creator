@@ -126,6 +126,31 @@ def merge_consecutive_lists(html):
 
     return html
 
+def strip_nested_p_in_lists(html):
+    """
+    Remove <p> tags nested inside <li> tags for cleaner list rendering.
+
+    markdown2 creates "loose lists" with <p> tags when there are blank lines
+    between list items. This causes the HTML parser to create separate paragraphs
+    for bullets and text. Strip these <p> tags to merge content properly.
+
+    Transforms:
+        <li><p>Text</p></li>  →  <li>Text</li>
+
+    Args:
+        html: HTML string to process
+
+    Returns:
+        HTML string with nested <p> tags removed from list items
+    """
+    # Remove <p> opening tags inside <li>
+    html = re.sub(r'(<li[^>]*>)\s*<p>', r'\1', html, flags=re.IGNORECASE)
+
+    # Remove </p> closing tags before </li>
+    html = re.sub(r'</p>\s*(</li>)', r'\1', html, flags=re.IGNORECASE)
+
+    return html
+
 class NumberedCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
         # Extract custom parameters before passing to Canvas
@@ -1029,6 +1054,11 @@ def create_pdf(markdown_text, config):
     # Post-process HTML to merge consecutive lists for cleaner rendering
     # This handles cases where markdown has blank lines between list items
     html = merge_consecutive_lists(html)
+
+    # Strip nested <p> tags inside <li> elements to prevent bullet/text separation
+    # markdown2 creates "loose lists" with <li><p>text</p></li> which causes
+    # the HTML parser to flush bullets separately from content
+    html = strip_nested_p_in_lists(html)
 
     # Use the HTML parser to create ReportLab flowables
     parser = HTMLToReportLab(styles)
