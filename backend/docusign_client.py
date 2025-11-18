@@ -27,9 +27,9 @@ class DocuSignClient:
         self.oauth_host = os.getenv('DOCUSIGN_OAUTH_HOST', 'account-d.docusign.com')
         self.private_key_path = os.getenv('DOCUSIGN_PRIVATE_KEY_PATH')
 
-        # Hardcoded counter-signer (Ian Strom)
-        self.counter_signer_email = 'ian.strom@davincisolutions.ai'
-        self.counter_signer_name = 'Ian Strom'
+        # Counter-signer (configurable via env vars, defaults to Ian Strom)
+        self.counter_signer_email = os.getenv('DOCUSIGN_COUNTER_SIGNER_EMAIL', 'ian.strom@davincisolutions.ai')
+        self.counter_signer_name = os.getenv('DOCUSIGN_COUNTER_SIGNER_NAME', 'Ian Strom')
 
         self.api_client = None
         self.envelopes_api = None

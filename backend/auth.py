@@ -60,18 +60,6 @@ class AzureADAuth:
         )
         return result
 
-    def acquire_token_by_auth_code(self, code):
-        """Exchange authorization code for tokens"""
-        if not self.msal_app:
-            return None
-
-        result = self.msal_app.acquire_token_by_authorization_code(
-            code,
-            scopes=self.scope,
-            redirect_uri=self.redirect_uri
-        )
-        return result
-
     def validate_token(self, token):
         """Validate JWT token from Azure AD"""
         try:

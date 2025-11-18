@@ -1121,6 +1121,7 @@ def convert_markdown():
         app.logger.warning('Unauthorized convert request')
         return jsonify({"error": "Authentication required"}), 401
 
+    temp_logo_file = None
     try:
         data = request.json
         markdown_text = data.get('markdown', '')
@@ -1175,10 +1176,11 @@ def convert_markdown():
                 app.logger.warning(f"Invalid logo upload: {e}")
                 return jsonify({"error": f"Uploaded logo is not a valid image: {str(e)}"}), 400
 
-            logo_path = '/tmp/temp_logo.png'
-            with open(logo_path, 'wb') as f:
-                f.write(logo_data)
-            config['logo_path'] = logo_path
+            # Create a temporary file for the logo
+            temp_logo_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            temp_logo_file.write(logo_data)
+            temp_logo_file.close()
+            config['logo_path'] = temp_logo_file.name
         else:
             # Use default Davinci logo if it exists (prefer PNG for ReportLab compatibility)
             # Try both locations - in container and in development
@@ -1211,6 +1213,13 @@ def convert_markdown():
     except Exception as e:
         app.logger.exception('PDF conversion failed: %s', str(e))
         return jsonify({"error": f"PDF generation failed: {str(e)}"}), 500
+    finally:
+        # Clean up temporary logo file if it was created
+        if temp_logo_file and os.path.exists(temp_logo_file.name):
+            try:
+                os.unlink(temp_logo_file.name)
+            except Exception as e:
+                app.logger.warning(f"Failed to delete temp logo file: {e}")
 
 # Removed unused /api/preview endpoint. Frontend does client-side preview.
 
@@ -1313,6 +1322,7 @@ def send_for_signature():
         app.logger.warning('Unauthorized DocuSign send request')
         return jsonify({"error": "Authentication required"}), 401
 
+    temp_logo_file = None
     try:
         data = request.json
 
@@ -1367,10 +1377,11 @@ def send_for_signature():
                 img = PILImage.open(io.BytesIO(logo_data))
                 img.verify()
 
-                logo_path = '/tmp/temp_logo_docusign.png'
-                with open(logo_path, 'wb') as f:
-                    f.write(logo_data)
-                config['logo_path'] = logo_path
+                # Create a temporary file for the logo
+                temp_logo_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                temp_logo_file.write(logo_data)
+                temp_logo_file.close()
+                config['logo_path'] = temp_logo_file.name
             except Exception as e:
                 app.logger.warning(f"Invalid logo upload for DocuSign: {e}")
                 return jsonify({"error": f"Invalid logo: {str(e)}"}), 400
@@ -1415,6 +1426,13 @@ def send_for_signature():
     except Exception as e:
         app.logger.exception(f'DocuSign send failed: {e}')
         return jsonify({"error": f"Failed to send document for signature: {str(e)}"}), 500
+    finally:
+        # Clean up temporary logo file if it was created
+        if temp_logo_file and os.path.exists(temp_logo_file.name):
+            try:
+                os.unlink(temp_logo_file.name)
+            except Exception as e:
+                app.logger.warning(f"Failed to delete temp logo file: {e}")
 
 @app.route('/api/docusign/envelope/<envelope_id>/status', methods=['GET'])
 def get_envelope_status(envelope_id):
