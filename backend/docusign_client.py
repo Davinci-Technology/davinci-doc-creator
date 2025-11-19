@@ -27,16 +27,23 @@ class DocuSignClient:
         self.oauth_host = os.getenv('DOCUSIGN_OAUTH_HOST', 'account-d.docusign.com')
         self.private_key_path = os.getenv('DOCUSIGN_PRIVATE_KEY_PATH')
 
-        # Counter-signer (configurable via env vars, defaults to Ian Strom)
-        self.counter_signer_email = os.getenv('DOCUSIGN_COUNTER_SIGNER_EMAIL', 'ian.strom@davincisolutions.ai')
-        self.counter_signer_name = os.getenv('DOCUSIGN_COUNTER_SIGNER_NAME', 'Ian Strom')
+        # Counter-signer configuration (Required via Environment Variables)
+        self.counter_signer_email = os.getenv('DOCUSIGN_COUNTER_SIGNER_EMAIL')
+        self.counter_signer_name = os.getenv('DOCUSIGN_COUNTER_SIGNER_NAME')
 
         self.api_client = None
         self.envelopes_api = None
 
         # Validate configuration
-        if not all([self.integration_key, self.user_id, self.account_id]):
-            logger.warning("DocuSign not fully configured. Some environment variables are missing.")
+        missing_vars = []
+        if not self.integration_key: missing_vars.append('DOCUSIGN_INTEGRATION_KEY')
+        if not self.user_id: missing_vars.append('DOCUSIGN_USER_ID')
+        if not self.account_id: missing_vars.append('DOCUSIGN_ACCOUNT_ID')
+        # We don't enforce counter-signer at init to allow app to start if docusign isn't used,
+        # but we will check it before sending.
+
+        if missing_vars:
+            logger.warning(f"DocuSign not fully configured. Missing: {', '.join(missing_vars)}")
 
     def _get_api_client(self):
         """Get or create authenticated API client"""
@@ -159,6 +166,10 @@ class DocuSignClient:
             dict with envelope_id, status, and recipient info
         """
         try:
+            # Validate counter-signer configuration
+            if not self.counter_signer_email or not self.counter_signer_name:
+                raise Exception("Counter-signer not configured. Set DOCUSIGN_COUNTER_SIGNER_EMAIL and DOCUSIGN_COUNTER_SIGNER_NAME.")
+
             envelopes_api = self._get_envelopes_api()
 
             # Encode PDF to base64

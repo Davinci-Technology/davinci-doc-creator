@@ -32,6 +32,11 @@ from flask_limiter.util import get_remote_address
 from docusign_client import DocuSignClient
 
 app = Flask(__name__)
+
+# Security: Enforce SECRET_KEY in production
+if os.environ.get('FLASK_ENV') == 'production' and not os.environ.get('SECRET_KEY'):
+    raise RuntimeError("CRITICAL: SECRET_KEY environment variable is not set in production!")
+
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 CORS(app,
      origins=["*"],  # Allow all origins for local development
@@ -63,7 +68,8 @@ try:
     # Register italic variants if available, or just map to regular for now to prevent crashes
     # Ideally we would download Italic too, but Regular/Bold covers 99% of use cases
 except Exception as e:
-    logging.warning(f"Failed to load NotoSans fonts: {e}. Fallback to Helvetica.")
+    # CRITICAL: Fonts are required for PDF generation. Log generic error if they fail.
+    app.logger.error(f"CRITICAL: Failed to load NotoSans fonts: {e}. PDF generation may fail or look incorrect.")
     # Fallback map if load fails (though we downloaded them)
     pass
 
