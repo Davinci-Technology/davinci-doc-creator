@@ -53,6 +53,13 @@ spec:
               optional: true
         - name: AZURE_AD_REDIRECT_URI
           value: "https://staging-docs.davincisolutions.ai/api/auth/callback"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets-staging
+              key: flask-secret-key
+        - name: FRONTEND_URL
+          value: "https://staging-docs.davincisolutions.ai"
         # DocuSign eSignature Integration
         - name: DOCUSIGN_INTEGRATION_KEY
           valueFrom:
@@ -85,11 +92,22 @@ spec:
               key: docusign-oauth-host
               optional: true
         - name: DOCUSIGN_PRIVATE_KEY_PATH
-          value: "/app/docusign_private.key"
+          value: "/app/secrets/docusign.key"
+        - name: DOCUSIGN_COUNTER_SIGNER_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets-staging
+              key: docusign-counter-signer-email
+              optional: true
+        - name: DOCUSIGN_COUNTER_SIGNER_NAME
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets-staging
+              key: docusign-counter-signer-name
+              optional: true
         volumeMounts:
         - name: docusign-key
-          mountPath: /app/docusign_private.key
-          subPath: docusign-private-key
+          mountPath: "/app/secrets"
           readOnly: true
         resources:
           requests:
@@ -104,7 +122,7 @@ spec:
           secretName: davinci-doc-secrets-staging
           items:
           - key: docusign-private-key
-            path: docusign-private-key
+            path: docusign.key
           optional: true
 ---
 apiVersion: v1
