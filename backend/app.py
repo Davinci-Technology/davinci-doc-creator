@@ -38,16 +38,65 @@ if os.environ.get('FLASK_ENV') == 'production' and not os.environ.get('SECRET_KE
     raise RuntimeError("CRITICAL: SECRET_KEY environment variable is not set in production!")
 
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Security: Configure CORS to allow only trusted origins
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000,http://localhost:3001').split(',')
 CORS(app,
-     origins=["*"],  # Allow all origins for local development
+     origins=FRONTEND_URL,
      expose_headers=['Content-Disposition'],
-     allow_headers=['Content-Type'],
+     allow_headers=['Content-Type', 'Authorization'],
      methods=['GET', 'POST', 'OPTIONS'],
      supports_credentials=True)
 
 # Initialize Azure AD authentication
 from auth import AzureADAuth
 auth = AzureADAuth(app)
+
+# Auth Routes
+@app.route('/api/auth/login')
+def login():
+    auth_url = auth.get_auth_url()
+    if not auth_url:
+        return jsonify({"error": "Authentication not configured (Client ID/Secret missing)"}), 500
+    return redirect(auth_url)
+
+@app.route('/api/auth/callback')
+def authorized():
+    code = request.args.get('code')
+    if not code:
+        return jsonify({"error": "No authorization code provided"}), 400
+        
+    result = auth.acquire_token_by_code(code)
+    if 'error' in result:
+        return jsonify({"error": result['error'], "desc": result.get('error_description')}), 401
+        
+    # Get user info from Graph API using the access token
+    user_info = auth.get_user_info(result.get('access_token'))
+    if not user_info:
+        return jsonify({"error": "Failed to fetch user profile"}), 500
+        
+    # Normalize user object for session
+    session['user'] = {
+        'name': user_info.get('displayName'),
+        'email': user_info.get('mail') or user_info.get('userPrincipalName'),
+        'oid': user_info.get('id')
+    }
+    
+    # Redirect to frontend root
+    frontend_root = FRONTEND_URL[0] if FRONTEND_URL else '/'
+    return redirect(frontend_root)
+
+@app.route('/api/auth/user')
+def get_current_user():
+    if 'user' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    return jsonify(session['user'])
+
+@app.route('/api/auth/logout')
+def logout():
+    session.clear()
+    frontend_root = FRONTEND_URL[0] if FRONTEND_URL else '/'
+    return redirect(frontend_root)
 
 # Initialize rate limiter for API endpoints
 limiter = Limiter(

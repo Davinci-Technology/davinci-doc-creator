@@ -46,6 +46,50 @@ spec:
               key: azure-client-secret
         - name: AZURE_AD_REDIRECT_URI
           value: "https://docs.davincisolutions.ai/api/auth/callback"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets
+              key: flask-secret-key
+        - name: FRONTEND_URL
+          value: "https://docs.davincisolutions.ai"
+        # DocuSign Configuration
+        - name: DOCUSIGN_INTEGRATION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets
+              key: docusign-integration-key
+              optional: true
+        - name: DOCUSIGN_USER_ID
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets
+              key: docusign-user-id
+              optional: true
+        - name: DOCUSIGN_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets
+              key: docusign-account-id
+              optional: true
+        - name: DOCUSIGN_PRIVATE_KEY_PATH
+          value: "/app/secrets/docusign.key"
+        - name: DOCUSIGN_COUNTER_SIGNER_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets
+              key: docusign-counter-signer-email
+              optional: true
+        - name: DOCUSIGN_COUNTER_SIGNER_NAME
+          valueFrom:
+            secretKeyRef:
+              name: davinci-doc-secrets
+              key: docusign-counter-signer-name
+              optional: true
+        volumeMounts:
+        - name: docusign-key
+          mountPath: "/app/secrets"
+          readOnly: true
         resources:
           requests:
             memory: "64Mi"
@@ -53,6 +97,14 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+      volumes:
+      - name: docusign-key
+        secret:
+          secretName: davinci-doc-secrets
+          items:
+          - key: docusign-private-key
+            path: docusign.key
+          optional: true
 ---
 apiVersion: v1
 kind: Service
