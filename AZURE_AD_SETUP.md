@@ -1,19 +1,20 @@
 # Azure AD Configuration for Davinci Document Creator
 
 ## App Registration Details
-- **Application Name:** Davinci Document Creator
-- **Client ID:** fec8fc31-50a9-4cf1-8bf9-ccd3f3b94d9c
+- **Application Name:** Davinci Document Creator (Shared with Code Pairing Tool)
+- **Client ID:** b1b2f903-c94b-4d7c-a391-c5097699e35f
 - **Tenant ID:** 953021b0-d492-4cc9-8551-e0b35080b03a
 - **Redirect URIs:**
-  - http://docs.davincisolutions.ai/auth/callback
-  - http://localhost:5001/auth/callback
+  - https://docs.davincisolutions.ai/api/auth/callback
+  - https://staging-docs.davincisolutions.ai/api/auth/callback
+  - http://localhost:5001/api/auth/callback
 
 ## Current Status
 - ✅ App Registration created
-- ✅ Client Secret generated
-- ✅ Kubernetes secret created
+- ✅ Client Secret configured (retrieved from shared environment)
+- ✅ Kubernetes secret created and patched
 - ✅ Deployment configured with Azure AD credentials
-- ⚠️ **Authentication is currently DISABLED** (REQUIRE_AUTH=false)
+- ✅ **Authentication is ENABLED** (REQUIRE_AUTH=true)
 
 ## To Enable Azure AD Authentication
 
@@ -35,14 +36,14 @@ kubectl apply -f k8s/deployment.yaml
 
 ## How It Works
 When enabled, users will:
-1. Visit http://docs.davincisolutions.ai
+1. Visit https://docs.davincisolutions.ai
 2. Be redirected to Microsoft login
 3. Authenticate with their Davinci AI Solutions account
 4. Be redirected back to the app with access
 
 ## Testing
-The app currently works WITHOUT authentication at:
-http://docs.davincisolutions.ai
+The app currently requires authentication at:
+https://docs.davincisolutions.ai
 
 ## Notes
 - The client secret expires in 2 years (2027)
